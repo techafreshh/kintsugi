@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { loadSettings } from "../config/settings.js";
 import { pathToFileURL } from "node:url";
 
 export const app = new Hono();
@@ -82,26 +83,11 @@ app.get("/repair-events/:id", (c) => {
   return c.json(event);
 });
 
-/**
- * Port binding precedence per the machine contract: PORT, then KINTSUGI_PORT,
- * then 8080. Blank or non-integer/out-of-range values fall through to the
- * next source instead of crashing startup.
- */
-export function resolvePort(
-  env: Partial<Record<"PORT" | "KINTSUGI_PORT", string | undefined>> = process.env,
-): number {
-  for (const value of [env.PORT, env.KINTSUGI_PORT]) {
-    if (value === undefined) continue;
-    const trimmed = value.trim();
-    if (trimmed === "") continue;
-    const port = Number(trimmed);
-    if (Number.isInteger(port) && port >= 1 && port <= 65535) return port;
-  }
-  return 8080;
-}
-
 export function main(): ReturnType<typeof serve> {
-  const port = resolvePort();
+  // Single env parse point: the receiver binds settings.port so the bound
+  // server port can never drift from the pinned PORT/KINTSUGI_PORT/8080
+  // contract that lives in src/config/settings.ts.
+  const { port } = loadSettings();
   const server = serve({ fetch: app.fetch, port });
   // The default host is all interfaces; readiness probe hits 127.0.0.1.
   console.log(`kintsugi receiver listening on port ${port}`);
