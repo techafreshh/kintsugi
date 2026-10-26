@@ -1,0 +1,8 @@
+{
+  // Build config: emit only src/, so the entrypoint lands at dist/src/receiver/app.js.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false
+  },
+  "include": ["src"]
+}
