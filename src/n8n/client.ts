@@ -95,8 +95,12 @@ export class N8nClient {
   }
 
   async listExecutions(): Promise<unknown> {
-    const response = await this.send("GET", `${API_BASE}/executions`);
-    return parseJsonBody(response, "GET", `${API_BASE}/executions`);
+    const path = `${API_BASE}/executions`;
+    const response = await this.send("GET", path);
+    if (response.status < 200 || response.status > 299) {
+      throw new Error(`n8n: GET ${path} returned ${response.status}: ${truncate(response.bodyText)}`);
+    }
+    return parseJsonBody(response, "GET", path);
   }
 
   async getExecution(id: string): Promise<ExecutionJson> {

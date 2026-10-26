@@ -178,6 +178,17 @@ describe("listExecutions", () => {
     expect(stub.requests[0]?.method).toBe("GET");
     expect(stub.requests[0]?.url).toBe("/api/v1/executions");
   });
+
+  it("rejects with a plain Error carrying the status when the server answers non-2xx", async () => {
+    const client = new N8nClient({ baseUrl: stub.baseUrl(), apiKey: "k" });
+    stub.setHandler((_req, res) => respond(res, 500, { message: "internal error" }));
+
+    const error = await client.listExecutions().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(N8nNotFoundError);
+    expect((error as Error).message).toContain("500");
+    expect((error as Error).message).toContain("internal error");
+  });
 });
 
 describe("probeRunEndpoint", () => {
