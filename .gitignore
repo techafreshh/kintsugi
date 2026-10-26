@@ -1,0 +1,25 @@
+# Dependencies / build
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Secrets — never commit
+.env
+*.env
+!.env.example
+
+# Runtime data
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Local tooling checkouts (not part of the product)
+.agents/skills/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
