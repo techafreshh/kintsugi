@@ -15,6 +15,8 @@ export interface Settings {
   modelJudge: string | undefined;
   telegramBotToken: string | undefined;
   telegramChatId: string | undefined;
+  /** SQLite database file path; unset means the consumer wiring applies its default (kintsugi.db). */
+  dbPath: string | undefined;
 }
 
 /**
@@ -60,5 +62,6 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     modelJudge: optionalString(env.MODEL_JUDGE),
     telegramBotToken: optionalString(env.TELEGRAM_BOT_TOKEN),
     telegramChatId: optionalString(env.TELEGRAM_CHAT_ID),
+    dbPath: optionalString(env.KINTSUGI_DB_PATH),
   };
 }

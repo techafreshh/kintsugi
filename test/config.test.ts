@@ -17,6 +17,7 @@ describe("loadSettings", () => {
       modelJudge: undefined,
       telegramBotToken: undefined,
       telegramChatId: undefined,
+      dbPath: undefined,
     });
   });
 
@@ -31,6 +32,7 @@ describe("loadSettings", () => {
       MODEL_JUDGE: "judge-model",
       TELEGRAM_BOT_TOKEN: "tg-bot",
       TELEGRAM_CHAT_ID: "42",
+      KINTSUGI_DB_PATH: "data/kintsugi.db",
     };
     expect(loadSettings(env)).toEqual({
       port: 9911,
@@ -42,6 +44,7 @@ describe("loadSettings", () => {
       modelJudge: "judge-model",
       telegramBotToken: "tg-bot",
       telegramChatId: "42",
+      dbPath: "data/kintsugi.db",
     });
   });
 
@@ -50,10 +53,12 @@ describe("loadSettings", () => {
       DASHBOARD_TOKEN: "  ",
       NEBIUS_API_KEY: "",
       MODEL_FAST: "\t ",
+      KINTSUGI_DB_PATH: " ",
     });
     expect(settings.dashboardToken).toBeUndefined();
     expect(settings.nebiusApiKey).toBeUndefined();
     expect(settings.modelFast).toBeUndefined();
+    expect(settings.dbPath).toBeUndefined();
   });
 });
 
