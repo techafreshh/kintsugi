@@ -62,7 +62,7 @@ Key needs: failures surface automatically with a diagnosis; low-risk fixes happe
 - [x] Sanitizer boundary + secret redaction in snapshots/LLM payloads/dashboard display
 - [x] Sandbox egress allowlist check; sandbox webhook secret
 - [x] docker-compose: dev profile (all-in-one with throwaway n8n) and deploy profile (joins existing `web_gateway` network)
-- [x] **Factory compose contract:** the compose file defines a service named **`worker`** (the environment stages run in) and the API service publishes its port on `127.0.0.1`; the API binds the `PORT` env var (fallback `KINTSUGI_PORT`, default 8080)
+- [x] **Factory compose contract:** the compose file defines a service named **`worker`** (the environment stages run in) and the API service publishes its port on `127.0.0.1`; the API binds the `PORT` env var (fallback `KINTSUGI_PORT`, default 8080). **Service start contract:** the API is started with `npm ci && npm run build && node dist/src/receiver/app.js`; readiness path is `GET /healthz`.
 - [x] **CI workflow** (`.github/workflows/ci.yml`): typecheck + tests on every PR (shipped by the walking-skeleton lap)
 - [x] MIT license, README (setup ≤10 steps, architecture diagram, tier table, security section)
 
