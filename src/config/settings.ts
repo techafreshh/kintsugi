@@ -17,6 +17,10 @@ export interface Settings {
   telegramChatId: string | undefined;
   /** SQLite database file path; unset means the consumer wiring applies its default (kintsugi.db). */
   dbPath: string | undefined;
+  /** n8n instance root (base URL the n8n client appends `/api/v1` to); unset disables n8n-backed flows. */
+  n8nBaseUrl: string | undefined;
+  /** n8n API key sent as `X-N8N-API-KEY` on every client request; must accompany n8nBaseUrl. */
+  n8nApiKey: string | undefined;
 }
 
 /**
@@ -63,5 +67,7 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     telegramBotToken: optionalString(env.TELEGRAM_BOT_TOKEN),
     telegramChatId: optionalString(env.TELEGRAM_CHAT_ID),
     dbPath: optionalString(env.KINTSUGI_DB_PATH),
+    n8nBaseUrl: optionalString(env.N8N_BASE_URL),
+    n8nApiKey: optionalString(env.N8N_API_KEY),
   };
 }

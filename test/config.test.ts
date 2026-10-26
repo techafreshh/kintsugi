@@ -18,6 +18,8 @@ describe("loadSettings", () => {
       telegramBotToken: undefined,
       telegramChatId: undefined,
       dbPath: undefined,
+      n8nBaseUrl: undefined,
+      n8nApiKey: undefined,
     });
   });
 
@@ -33,6 +35,8 @@ describe("loadSettings", () => {
       TELEGRAM_BOT_TOKEN: "tg-bot",
       TELEGRAM_CHAT_ID: "42",
       KINTSUGI_DB_PATH: "data/kintsugi.db",
+      N8N_BASE_URL: "https://n8n.example",
+      N8N_API_KEY: "n8n-key",
     };
     expect(loadSettings(env)).toEqual({
       port: 9911,
@@ -45,6 +49,8 @@ describe("loadSettings", () => {
       telegramBotToken: "tg-bot",
       telegramChatId: "42",
       dbPath: "data/kintsugi.db",
+      n8nBaseUrl: "https://n8n.example",
+      n8nApiKey: "n8n-key",
     });
   });
 
@@ -54,11 +60,15 @@ describe("loadSettings", () => {
       NEBIUS_API_KEY: "",
       MODEL_FAST: "\t ",
       KINTSUGI_DB_PATH: " ",
+      N8N_BASE_URL: "\n ",
+      N8N_API_KEY: " ",
     });
     expect(settings.dashboardToken).toBeUndefined();
     expect(settings.nebiusApiKey).toBeUndefined();
     expect(settings.modelFast).toBeUndefined();
     expect(settings.dbPath).toBeUndefined();
+    expect(settings.n8nBaseUrl).toBeUndefined();
+    expect(settings.n8nApiKey).toBeUndefined();
   });
 });
 
