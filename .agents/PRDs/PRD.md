@@ -252,6 +252,39 @@ Telegram cards for Tier-2 events (diff summary + Approve/Reject inline buttons);
 **Phase 4 — Ship (Oct 29, buffer Oct 30):** deploy to VPS (`web_gateway`), seed real instance, all scenarios E2E, README + feedback draft, video support, repo hygiene (secrets audit, license).
 *Validation:* §11 checklist all green; Devpost submission ready.
 
+### Build order for slicing (slicing guidance — one issue per line, strictly in this order)
+
+Component tables, API lists and feature prose elsewhere in this PRD are DESCRIPTIONS of these deliverables, not separate work items — slice exactly this list, one issue per line:
+
+1. Walking skeleton: TS/npm scaffold (strict tsc), hono API serving `GET /healthz` returning `{"ok":true}` and binding `PORT` (fallback `KINTSUGI_PORT`, default 8080), vitest wired, CI workflow `.github/workflows/ci.yml` running typecheck+tests on PRs.
+2. Config module: dotenv-lite env parsing into a typed Settings object + `.env.example`.
+3. SQLite store (node:sqlite): repair events (unique per execution id), workflow snapshots, decisions, llm_traces, metrics.
+4. Sanitizer + redaction: strip invisible/Bidi/tag-range characters, normalize homoglyph confusables, flag instruction-shaped lines; redact secret-shaped strings and drop n8n credential blocks.
+5. Workflow diff: node-level diff (added/removed/changed with leaf paths) + changed-line count.
+6. Workflow view: raw workflow JSON + execution runData → compact sanitized view (node list, edge list, failing-node input data, trigger payload capture, last-known-good diff).
+7. n8n client: workflow get/create/update/delete, executions list/get-with-data, run-endpoint capability probe, activate/deactivate.
+8. patch-ops: path-level operation application with strict validation (set_parameter only on existing paths; retry/onError whitelists; add/remove with connection rewiring in code; node renames disallowed; loud rejection on any violation).
+9. LLMPort interface + TypeBox verdict schemas + deterministic mock implementation (scenario-aware: schema drift, 429/502, human-broke-it).
+10. Nebius provider on pi-ai behind LLMPort: env-driven MODEL_FAST/MODEL_REASON/MODEL_JUDGE, `submit_verdict` tool-call pattern with text-JSON fallback.
+11. Hardened prompt builders (`<data>` boundaries) + diagnose stage.
+12. Patch stage: plan validation (affected-nodes scope, op schema) + application via patch-ops.
+13. Deterministic tier classifier (flag-only/approve/auto-promote; escalation on doubt).
+14. Four escalate-only decision gates: triage, patch-review, promotion, iteration.
+15. Sandbox: harness (workflow copy, production-trigger swap to pinned manual trigger, run-endpoint primary with webhook+secret fallback, delete after unless keep-flag, static egress allowlist check) + verifier (expectations from the workflow's most recent successful execution: types, record counts, null-rate).
+16. Repair orchestrator + worker loop: full pipeline with status transitions, approve/reject/revert actions, pre-repair and pre-promotion snapshots, metrics.
+17. Receiver API: POST /error-hook (idempotent), GET /repair-events list + detail, POST approve/reject/revert behind the DASHBOARD_TOKEN gate, static file serving.
+18. Dashboard: one htmx page — metrics chips, status-pill feed, detail with diagnosis, side-by-side JSON diff, verification log, agent-trace timeline, approve/reject/revert buttons.
+19. Agent traces wired through every LLM call into llm_traces (stage, model, mode, duration, tokens, capped prompt/response, parsed verdict).
+20. Telegram notifier (flag-gated, disabled by default): Tier-2 approval cards with inline Approve/Reject buttons.
+21. Mock upstream chaos service: GET /api/users with old/new schema modes, POST /chaos (schema, fail_next countdown, fail_status), GET /chaos; deterministic records.
+22. Seed workflows: demo chaos workflow (webhook → HTTP → Set mapping → Code validator) + error-trigger workflow + `kintsugi seed-demo` seeder that installs them and registers a baseline snapshot.
+23. Dockerfile + docker-compose with dev and deploy profiles (service named `worker`; API port published on 127.0.0.1; one image, commands `kintsugi api` / `kintsugi worker` / mock-upstream bin).
+24. CLI completion: `kintsugi fix <execution-id>` runs the full repair pipeline inline against a real failing execution and prints the report.
+25. E2E scenario 1 — schema drift → Set-only patch → auto-promote (mock LLM).
+26. E2E scenario 2 — transient 429/502 → retry/backoff patch → auto-promote once the countdown exhausts (mock LLM).
+27. E2E scenario 3 — human broke the Code node → restore-from-snapshot patch → approval path (mock LLM).
+28. README final: ≤10-step setup, architecture diagram, tier table, security section; repo hygiene audit (no secrets committed, MIT at root, demo assets ready).
+
 ## 13. Future Considerations
 
 - **`models.classify()` upgrade:** swap decision gates to a true classifier API (OpenAI Decisions / TypeSafe Jev / future Nebius equivalent) behind the existing gate contract — the emerging "decision model" category; small adapter, same schemas.
