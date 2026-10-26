@@ -61,8 +61,8 @@ Key needs: failures surface automatically with a diagnosis; low-risk fixes happe
 - [x] LLM layer on pi-ai: Nebius custom provider (all inference), mock port, TypeBox-validated verdicts
 - [x] Sanitizer boundary + secret redaction in snapshots/LLM payloads/dashboard display
 - [x] Sandbox egress allowlist check; sandbox webhook secret
-- [x] docker-compose: dev profile (all-in-one with throwaway n8n) and deploy profile (joins existing `web_gateway` network)
-- [x] **Factory compose contract:** the compose file defines a service named **`worker`** (the environment stages run in) and the API service publishes its port on `127.0.0.1`; the API binds the `PORT` env var (fallback `KINTSUGI_PORT`, default 8080). **Service start contract:** the API is started with `npm ci && npm run build && node dist/src/receiver/app.js`; readiness path is `GET /healthz`.
+- [x] docker-compose (demo deliverable): dev profile (all-in-one with n8n) and deploy profile (joins the existing `web_gateway` network) — validated by the operator at demo time, not on factory machines
+- [x] **Machine contract (instabox, verified 2026-10-26):** factory machines (snapshot `factory-base`) run the app directly on **node 22.23.3**; the machine runtime is the receiver only, started with `npm ci && npm run build && node dist/src/receiver/app.js`, binding `PORT` (fallback `KINTSUGI_PORT`, default 8080), readiness `GET /healthz`. **Never require node ≥ 23 anywhere** — no `engines` above 22, no node:24 image tags, no docs claiming node 24. `node:sqlite` is stable on 22.23.3 (unflagged since 22.13); an `ExperimentalWarning` on first use is expected and harmless. Machine E2E uses a scripted n8n-client fake + the mock upstream + the mock LLM; real-n8n flows are demo territory (operator checklist only).
 - [x] **CI workflow** (`.github/workflows/ci.yml`): typecheck + tests on every PR (shipped by the walking-skeleton lap)
 - [x] MIT license, README (setup ≤10 steps, architecture diagram, tier table, security section)
 
@@ -185,7 +185,7 @@ Telegram cards for Tier-2 events (diff summary + Approve/Reject inline buttons);
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Runtime | Node 24, TypeScript (strict) | local nvm v24.18; Docker `node:24-slim` |
+| Runtime | TypeScript (strict) on node 22 | verified factory runtime: node 22.23.3 (instabox, snapshot `factory-base`); never require node ≥ 23 (engines, images, docs) |
 | LLM | **`@earendil-works/pi-ai`** — pinned version; only LLM dep | custom Nebius provider via `createProvider()` + `envApiKeyAuth` + `openai-completions`; TypeBox schemas; token/cost tracking |
 | HTTP | hono + @hono/node-server | receiver + mock upstream |
 | DB | `node:sqlite` | fallback `better-sqlite3` if needed |
@@ -278,11 +278,11 @@ Component tables, API lists and feature prose elsewhere in this PRD are DESCRIPT
 20. Telegram notifier (flag-gated, disabled by default): Tier-2 approval cards with inline Approve/Reject buttons.
 21. Mock upstream chaos service: GET /api/users with old/new schema modes, POST /chaos (schema, fail_next countdown, fail_status), GET /chaos; deterministic records.
 22. Seed workflows: demo chaos workflow (webhook → HTTP → Set mapping → Code validator) + error-trigger workflow + `kintsugi seed-demo` seeder that installs them and registers a baseline snapshot.
-23. Dockerfile + docker-compose with dev and deploy profiles (service named `worker`; API port published on 127.0.0.1; one image, commands `kintsugi api` / `kintsugi worker` / mock-upstream bin).
+23. Dockerfile + docker-compose demo deliverable: one image (node:22), commands `kintsugi api` / `kintsugi worker` / mock-upstream bin; dev profile brings up n8n + repairer + dashboard + mock upstream, deploy profile joins `web_gateway`. Machine acceptance: files parse and match this contract; actual stack bring-up is operator/demo territory.
 24. CLI completion: `kintsugi fix <execution-id>` runs the full repair pipeline inline against a real failing execution and prints the report.
-25. E2E scenario 1 — schema drift → Set-only patch → auto-promote (mock LLM).
-26. E2E scenario 2 — transient 429/502 → retry/backoff patch → auto-promote once the countdown exhausts (mock LLM).
-27. E2E scenario 3 — human broke the Code node → restore-from-snapshot patch → approval path (mock LLM).
+25. E2E scenario 1 — schema drift → Set-only patch → auto-promote (mock LLM) — machine E2E via scripted n8n-client fake + mock upstream; no real n8n on machines.
+26. E2E scenario 2 — transient 429/502 → retry/backoff patch → auto-promote once the countdown exhausts (mock LLM) — machine E2E via scripted n8n-client fake; no real n8n on machines.
+27. E2E scenario 3 — human broke the Code node → restore-from-snapshot patch → approval path (mock LLM) — machine E2E via scripted n8n-client fake; no real n8n on machines.
 28. README final: ≤10-step setup, architecture diagram, tier table, security section; repo hygiene audit (no secrets committed, MIT at root, demo assets ready).
 
 ## 13. Future Considerations
