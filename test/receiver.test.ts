@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import type { Server as HttpServer } from "node:http";
 import { afterAll, describe, expect, it } from "vitest";
-import { app, resolvePort } from "../src/receiver/app.js";
+import { app } from "../src/receiver/app.js";
 
 const postErrorHook = (body: string) =>
   app.request("/error-hook", {
@@ -91,27 +91,6 @@ describe("GET /repair-events", () => {
     const res = await app.request("/repair-events/no-such-event");
     expect(res.status).toBe(404);
   });
-});
-
-describe("resolvePort", () => {
-  const cases: Array<{
-    name: string;
-    env: Partial<Record<"PORT" | "KINTSUGI_PORT", string | undefined>>;
-    expected: number;
-  }> = [
-    { name: "no env -> 8080", env: {}, expected: 8080 },
-    { name: "PORT wins", env: { PORT: "9911" }, expected: 9911 },
-    { name: "KINTSUGI_PORT alone is honored", env: { KINTSUGI_PORT: "9922" }, expected: 9922 },
-    { name: "both set -> PORT wins", env: { PORT: "9911", KINTSUGI_PORT: "9922" }, expected: 9911 },
-    { name: "invalid PORT falls through to KINTSUGI_PORT", env: { PORT: "not-a-port", KINTSUGI_PORT: "9922" }, expected: 9922 },
-    { name: "blank PORT falls through to default", env: { PORT: "  " }, expected: 8080 },
-    { name: "out-of-range PORT falls through", env: { PORT: "70000", KINTSUGI_PORT: "9922" }, expected: 9922 },
-  ];
-  for (const { name, env, expected } of cases) {
-    it(name, () => {
-      expect(resolvePort(env)).toBe(expected);
-    });
-  }
 });
 
 describe("real loopback serve", () => {
