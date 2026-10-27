@@ -121,7 +121,7 @@ describe("Dockerfile", () => {
 
 describe("package.json", () => {
   it("exposes kintsugi and mock-upstream bins", () => {
-    expect(packageJson.bin?.["kintsugi"]).toBe("dist/src/cli.js");
+    expect(packageJson.bin?.["kintsugi"]).toBe("bin/kintsugi");
     const bins = Object.values(packageJson.bin ?? {});
     expect(bins.some((target) => target.includes("mockupstream"))).toBe(true);
   });
