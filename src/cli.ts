@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
- * `kintsugi` CLI entrypoint (issue #21): wires real `N8nClient` + `openStore`
- * from `Settings` and runs the demo seeder. Usage:
- *   kintsugi seed-demo
- * Prints exactly two lines to stdout (`demo <id>`, `error-trigger <id>`) and
- * exits 0. Missing n8n configuration exits 2 with a message on stderr.
+ * `kintsugi` CLI entrypoint (issues #21/#22): one binary, multiple commands.
+ *   kintsugi api        — serve the receiver dashboard + webhook API.
+ *   kintsugi worker     — run the repair-loop poller until SIGINT/SIGTERM.
+ *   kintsugi fix <id>   — not yet wired (stub: stderr message, exit 1).
+ *   kintsugi seed-demo  — run the demo seeder (issue #21): prints exactly two
+ *     lines to stdout (`demo <id>`, `error-trigger <id>`) and exits 0.
+ *     Missing n8n configuration exits 2 with a message on stderr.
  */
 
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { loadSettings } from "./config/settings.js";
 import { N8nClient } from "./n8n/client.js";
@@ -42,20 +45,53 @@ export async function runSeedDemo(): Promise<void> {
 }
 
 function usage(): void {
-  console.error("usage: kintsugi seed-demo");
+  console.error("usage: kintsugi <api|worker|fix <event-id>|seed-demo>");
+}
+
+/**
+ * Direct-execution guard that survives bin symlinks: `argv[1]` keeps the
+ * symlink path while `import.meta.url` carries the resolved real path, so a
+ * naive equality check silently skips `main()` when invoked as `kintsugi`.
+ */
+function isMainModule(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return import.meta.url === pathToFileURL(process.argv[1]).href;
+  }
 }
 
 export async function main(argv: string[] = process.argv): Promise<void> {
   const subcommand = argv[2];
+  if (subcommand === "api") {
+    // Serve the receiver dashboard + webhook API (mirrors `node dist/src/receiver/app.js`).
+    const { main: serveApi } = await import("./receiver/app.js");
+    serveApi();
+    return;
+  }
+  if (subcommand === "worker") {
+    // Run the repair-loop poller until SIGINT/SIGTERM.
+    const { main: serveWorker } = await import("./worker-entry.js");
+    serveWorker();
+    return;
+  }
   if (subcommand === "seed-demo") {
     await runSeedDemo();
+    return;
+  }
+  if (subcommand === "fix") {
+    // Single-event repair wiring is later-slice territory; the stub pins the
+    // contract (stderr message, non-zero exit) without faking a repair.
+    console.error("kintsugi fix: not yet wired");
+    process.exit(1);
     return;
   }
   usage();
   process.exit(2);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule()) {
   main().catch((error: unknown) => {
     console.error(`kintsugi seed-demo: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);

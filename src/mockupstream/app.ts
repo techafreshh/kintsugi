@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
@@ -93,6 +95,9 @@ export function createChaosApp(options: CreateChaosAppOptions = {}): Hono {
   const state = createChaosState(options.initialState ?? {});
   const app = new Hono();
 
+  // Readiness probe for container runtimes; never touches chaos state.
+  app.get("/healthz", (c) => c.json({ ok: true }));
+
   app.get("/api/users", (c) => {
     // Only this route consumes the failure countdown; control-plane routes
     // never decrement.
@@ -154,8 +159,19 @@ export function main(): ReturnType<typeof serve> {
 }
 
 // Run the server only when executed directly
-// (`node dist/src/mockupstream/app.js`), not when imported by tests or other
-// modules. Node has no import.meta.main.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// (`node dist/src/mockupstream/app.js` or via the `mock-upstream` bin
+// symlink), not when imported by tests or other modules. Node has no
+// import.meta.main. The realpath comparison keeps bin symlinks working:
+// argv[1] keeps the symlink path while import.meta.url is already resolved.
+if (isMainModule()) {
   main();
+}
+
+function isMainModule(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return import.meta.url === pathToFileURL(process.argv[1]).href;
+  }
 }

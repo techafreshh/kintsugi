@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": { "kintsugi": "dist/src/cli.js" },
+  "bin": {
+    "kintsugi": "dist/src/cli.js",
+    "kintsugi-mock-upstream": "dist/src/mockupstream/app.js",
+    "mock-upstream": "dist/src/mockupstream/app.js"
+  },
   "engines": {
     "node": ">=22"
   },

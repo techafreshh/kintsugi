@@ -1,0 +1,122 @@
+# Kintsugi demo stack (issue #22): one image (`kintsugi:latest`, built from
+# this repo), multiple commands.
+#   docker compose --profile dev up --build       # all-in-one demo incl. n8n
+#   docker compose --profile deploy up --build    # no n8n; api + worker join
+#     the existing external web_gateway network (create it first if missing:
+#     `docker network create web_gateway`).
+# Every kintsugi service reads the same optional `.env` file (missing file is
+# fine: every variable below falls back to a default, and blank means unset).
+
+name: kintsugi
+
+services:
+  api:
+    build: .
+    image: kintsugi:latest
+    command: ["kintsugi", "api"]
+    ports:
+      - "127.0.0.1:${PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      KINTSUGI_DB_PATH: /data/kintsugi.db
+      DASHBOARD_TOKEN: ${DASHBOARD_TOKEN:-}
+      NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
+      NEBIUS_BASE_URL: ${NEBIUS_BASE_URL:-}
+      MODEL_FAST: ${MODEL_FAST:-}
+      MODEL_REASON: ${MODEL_REASON:-}
+      MODEL_JUDGE: ${MODEL_JUDGE:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_NOTIFIER_ENABLED: ${TELEGRAM_NOTIFIER_ENABLED:-}
+      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-}
+      N8N_BASE_URL: ${N8N_BASE_URL:-}
+      N8N_API_KEY: ${N8N_API_KEY:-}
+      MOCK_UPSTREAM_URL: ${MOCK_UPSTREAM_URL:-}
+      KINTSUGI_PUBLIC_URL: ${KINTSUGI_PUBLIC_URL:-}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - kintsugi-data:/data
+    networks:
+      - default
+      - web_gateway
+    profiles: ["dev", "deploy"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/healthz').then((r)=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    build: .
+    image: kintsugi:latest
+    command: ["kintsugi", "worker"]
+    environment:
+      KINTSUGI_DB_PATH: /data/kintsugi.db
+      NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
+      NEBIUS_BASE_URL: ${NEBIUS_BASE_URL:-}
+      MODEL_FAST: ${MODEL_FAST:-}
+      MODEL_REASON: ${MODEL_REASON:-}
+      MODEL_JUDGE: ${MODEL_JUDGE:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_NOTIFIER_ENABLED: ${TELEGRAM_NOTIFIER_ENABLED:-}
+      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-}
+      N8N_BASE_URL: ${N8N_BASE_URL:-}
+      N8N_API_KEY: ${N8N_API_KEY:-}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - kintsugi-data:/data
+    networks:
+      - default
+      - web_gateway
+    profiles: ["dev", "deploy"]
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  mock-upstream:
+    build: .
+    image: kintsugi:latest
+    command: ["mock-upstream"]
+    ports:
+      - "127.0.0.1:${MOCK_UPSTREAM_PORT:-3001}:3001"
+    environment:
+      PORT: "3001"
+    env_file:
+      - path: .env
+        required: false
+    networks:
+      - default
+    profiles: ["dev", "deploy"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/healthz').then((r)=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:${N8N_VERSION:-latest}
+    ports:
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
+    environment:
+      N8N_PORT: "5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+    networks:
+      - default
+    profiles: ["dev"]
+    restart: unless-stopped
+
+networks:
+  web_gateway:
+    external: true
+
+volumes:
+  kintsugi-data:
+  n8n-data:
