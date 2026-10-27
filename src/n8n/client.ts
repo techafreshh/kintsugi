@@ -103,6 +103,28 @@ export class N8nClient {
     return parseJsonBody(response, "GET", path);
   }
 
+  async listWorkflows(): Promise<WorkflowJson[]> {
+    const path = `${API_BASE}/workflows`;
+    const response = await this.send("GET", path);
+    if (response.status < 200 || response.status > 299) {
+      throw new Error(
+        `n8n: GET ${path} returned ${response.status}: ${truncate(response.bodyText)}`,
+      );
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(response.bodyText);
+    } catch (cause) {
+      throw new Error(`n8n: GET ${path} returned non-JSON body: ${truncate(response.bodyText)}`, { cause });
+    }
+    if (Array.isArray(parsed)) return parsed.filter((item): item is WorkflowJson => isRecord(item));
+    if (isRecord(parsed)) {
+      const data = parsed["data"];
+      if (Array.isArray(data)) return data.filter((item): item is WorkflowJson => isRecord(item));
+    }
+    return [];
+  }
+
   async getExecution(id: string): Promise<ExecutionJson> {
     // includeData=true is what makes n8n return the execution's runData payload.
     return this.requestRecord("execution", id, "GET", `${API_BASE}/executions/${id}?includeData=true`);
@@ -188,6 +210,10 @@ function parseJsonBody(response: SendResult, method: string, path: string): Reco
 function describe(value: unknown): string {
   if (value instanceof Error) return value.message;
   return typeof value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function truncate(text: string): string {

@@ -25,6 +25,10 @@ export interface Settings {
   n8nBaseUrl: string | undefined;
   /** n8n API key sent as `X-N8N-API-KEY` on every client request; must accompany n8nBaseUrl. */
   n8nApiKey: string | undefined;
+  /** Mock-upstream base URL driving the demo workflow HTTP node (`<base>/api/users`); blank falls back to the seeder default. */
+  mockUpstreamUrl: string | undefined;
+  /** Public Kintsugi root used to build the error-trigger `/error-hook` target; blank falls back to localhost:port. */
+  publicUrl: string | undefined;
 }
 
 /**
@@ -85,5 +89,7 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     dbPath: optionalString(env.KINTSUGI_DB_PATH),
     n8nBaseUrl: optionalString(env.N8N_BASE_URL),
     n8nApiKey: optionalString(env.N8N_API_KEY),
+    mockUpstreamUrl: optionalString(env.MOCK_UPSTREAM_URL),
+    publicUrl: optionalString(env.KINTSUGI_PUBLIC_URL),
   };
 }
