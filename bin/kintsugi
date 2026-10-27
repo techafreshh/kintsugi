@@ -1,0 +1,17 @@
+#!/usr/bin/env node
+// `kintsugi` binary dispatch (issue #23): `fix <execution-id>` runs the
+// inline repair entrypoint, every other subcommand delegates to the main CLI
+// so `api`/`worker`/`seed-demo` keep working through this single bin path.
+// Unknown or missing subcommands print usage to stderr and exit 1.
+const subcommand = process.argv[2];
+if (subcommand === "fix") {
+  const { main } = await import("../dist/src/cli/fix.js");
+  // fix's main() reads the execution id at argv[2]; shift the subcommand out.
+  await main([process.argv[0], process.argv[1], process.argv[3]]);
+} else if (subcommand === "api" || subcommand === "worker" || subcommand === "seed-demo") {
+  const { main } = await import("../dist/src/cli.js");
+  await main();
+} else {
+  console.error("Usage: kintsugi fix <execution-id>");
+  process.exit(1);
+}

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
-    "kintsugi": "dist/src/cli.js",
+    "kintsugi": "bin/kintsugi",
     "kintsugi-mock-upstream": "dist/src/mockupstream/app.js",
     "mock-upstream": "dist/src/mockupstream/app.js"
   },
