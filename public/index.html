@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>kintsugi dashboard</title>
+<script src="https://unpkg.com/htmx.org@2/dist/htmx.min.js"></script>
 </head>
-<body>
-<!-- Placeholder shell: the full dashboard page (slice 18) replaces this. -->
-<main>
+<body data-token="">
 <h1>kintsugi dashboard</h1>
-<p>Repair events API is running. See <code>/repair-events</code>.</p>
-</main>
+<section><h2>Metrics</h2><div class="chips"></div></section>
+<section><h2>Events</h2><div id="feed" hx-get="/dashboard/feed" hx-trigger="load" hx-swap="innerHTML"></div></section>
+<section><h2>Detail</h2><div id="detail"><p>Select an event to inspect it.</p></div></section>
+<script>document.body.addEventListener('htmx:configRequest',function(e){var t=document.body.getAttribute('data-token');if(t){e.detail.headers['Authorization']='Bearer '+t;}});</script>
 </body>
 </html>
