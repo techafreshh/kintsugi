@@ -31,11 +31,11 @@ n8n Error Trigger
        ▼
 src/receiver/app.ts ──► src/store/store.ts ──► repair event persisted
        │                        ▲
-       │ dashboard feed         │ worker repair loop
+       │ JSON API feed          │ worker repair loop
        │ + approve/reject/      │ src/orchestrator/
        │   revert (token-gated) │   orchestrator.ts + worker.ts
        ▼                        │
-   dashboard              detect → diagnose → patch → sandbox verify
+   placeholder shell      detect → diagnose → patch → sandbox verify
    (public/)              (view)  (LLM)      (code)  (src/sandbox/)
                                                      │
                               ┌──────────────────────┘
@@ -65,13 +65,13 @@ How it works: every failed execution lands in the store via `POST /error-hook`. 
 | `POST` | `/repair-events/:id/reject` | Reject the parked fix; token-gated |
 | `POST` | `/repair-events/:id/revert` | Restore the baseline snapshot; token-gated |
 | `POST` | `/telegram/webhook` | Telegram approval callbacks; `200 {"ok":true}` on valid updates (400 on malformed JSON; orchestrator failures still answer 200 so Telegram does not retry) |
-| `GET` | `/` | Dashboard page when built (`npm run build` copies `public/` to `dist/`); otherwise `404` JSON |
+| `GET` | `/` | Placeholder dashboard shell (`public/index.html`; `npm run build` copies `public/` to `dist/`); `404` JSON when no built page is present |
 
 Contract notes: unknown routes return JSON `404` (never 5xx); malformed JSON bodies return `400` (never 500, never hang). Detail responses alias the wire status `awaiting-approval` to `awaiting_approval` and the classifier tier `auto-promote` to `auto`. The detail `verification` block is `{ok, strategy, rowCount, provenance, reason}` — `ok` is true exactly when a `verified` verdict exists for the event.
 
 ## Dashboard
 
-`GET /` serves the single-page dashboard (no build step beyond `npm run build`). The feed lists every repair event with its status; the detail view shows the diagnosis, the workflow diff, the sandbox verification log, and the per-event agent traces (`llm_traces` rows behind each diagnose/patch/judge call). The feed is publicly viewable; the approve, reject, and revert buttons require `DASHBOARD_TOKEN` (unset means open for local use).
+`GET /` serves the placeholder shell from `public/index.html` ("Repair events API is running. See `/repair-events`") — there is no feed/detail UI yet. The event feed, per-event detail (diagnosis, workflow diff, sandbox verification log, per-event agent traces from `llm_traces`), and the approve/reject/revert mutations all live on the JSON API: `GET /repair-events`, `GET /repair-events/:id`, and the token-gated `POST /repair-events/:id/approve|reject|revert` endpoints. The feed endpoints are publicly viewable; the mutation endpoints require `Authorization: Bearer <token>` matching `DASHBOARD_TOKEN` when it is set (unset means open for local use).
 
 ## Tiers
 
@@ -124,7 +124,7 @@ Every variable is optional: unset (or blank) disables the feature that uses it, 
 - Credential redaction (`src/security/redact.ts`): secret-shaped strings (JWTs, provider keys, `Bearer` values, `password=`/`token=`/`apiKey=` assignments) become `[REDACTED]`; every `credentials` key is dropped from workflow views sent to the LLM, snapshots, or the dashboard. Credentials are never read, exported, or modified.
 - Secrets live in `.env` only (`NEBIUS_API_KEY`, `N8N_API_KEY`, `TELEGRAM_BOT_TOKEN`); never logged, never committed. `.gitignore` and `.dockerignore` both exclude `.env`, databases, and runtime data.
 - Sandbox safety: HTTP-node hosts are checked against an egress allowlist (warn-only finding on the result); the sandbox workflow copy is deleted after verification unless explicitly kept.
-- Dashboard: the event feed is publicly viewable; approve, reject, and revert require `DASHBOARD_TOKEN` when set.
+- Dashboard/API auth: the `GET /` shell and feed endpoints are publicly viewable; approve, reject, and revert require `DASHBOARD_TOKEN` when set.
 - Patches are applied by code and validated: only affected nodes, only resolvable paths, exact-diff check — unrelated-node edits are rejected.
 
 ## Docker
@@ -155,7 +155,7 @@ One binary, four subcommands (`src/cli.ts`, `bin/kintsugi`):
 ## Troubleshooting
 
 - Wrong port? Binding precedence is `PORT`, then `KINTSUGI_PORT`, then `8080` — blank or invalid values fall through to the next source instead of crashing, so check for typos (`PORT=abc` silently falls through).
-- Empty dashboard feed? Events only appear after `POST /error-hook` fires — `curl` a failing execution payload at it, or run `seed-demo` plus the mock upstream. Unknown routes and ids return JSON `404`, never 5xx, so a `404` means "nothing stored yet", not a crash.
+- Empty feed? Events only appear after `POST /error-hook` fires — `curl` a failing execution payload at it, or run `seed-demo` plus the mock upstream. Unknown routes and ids return JSON `404`, never 5xx, so a `404` means "nothing stored yet", not a crash.
 - Database confusion? The default store is the `kintsugi.db` file in the working directory; set `KINTSUGI_DB_PATH` to share one file between the API and worker (compose mounts `/data/kintsugi.db`). Use `:memory:` only for scratch runs and tests — nothing persists.
 - Telegram silent? It is off by default: it needs `TELEGRAM_BOT_TOKEN` **and** `TELEGRAM_CHAT_ID` **and** `TELEGRAM_NOTIFIER_ENABLED=true` (exact value, case-insensitive). Anything else means zero outbound calls — check the spelling of `true`.
 - n8n calls failing? Both `N8N_BASE_URL` and `N8N_API_KEY` must be set; either one blank keeps every n8n-backed flow (seeder, `fix`, worker promotion) off. The client appends `/api/v1`, so the base URL must be the instance root.
