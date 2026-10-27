@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
 import { loadSettings, type Settings } from "../config/settings.js";
 import { createOrchestrator, type Orchestrator } from "../orchestrator/orchestrator.js";
+import { renderDetail, renderFeed, renderIndex } from "./dashboard.js";
 import type { LLMPort } from "../llm/port.js";
 import { handleTelegramUpdate } from "../notify/telegram.js";
 import { openStore, type Store, type StoredRepairEvent } from "../store/store.js";
@@ -302,15 +302,22 @@ export function createApp({ store, settings, orchestrator, fetchFn }: CreateAppO
   app.post("/repair-events/:id/reject", action("reject", "rejected", "rejected", "rejected via dashboard"));
   app.post("/repair-events/:id/revert", action("revert", "reverted", "reverted", "reverted via dashboard"));
 
-  // Dashboard entry: serve the built page when present, else a JSON 404 so the
-  // API contract holds even before `npm run build` copies public/ to dist/.
-  app.get("/", (c) => {
-    for (const root of STATIC_ROOTS) {
-      const file = join(root, "index.html");
-      if (existsSync(file)) return c.html(readFileSync(file, "utf8"));
-    }
-    return c.json({ error: "not found" }, 404);
+  // Human-friendly dashboard (issue #44): server-rendered htmx page plus
+  // feed/detail fragments. Registered before serveStatic so the fragments
+  // are never shadowed by static files.
+  app.get("/dashboard/feed", (c) => c.html(renderFeed(store)));
+
+  app.get("/dashboard/events/:id", (c) => {
+    const id = c.req.param("id");
+    if (id === undefined) return c.html(`<div class="error"><p>event not found</p></div>`, 404);
+    const html = renderDetail(store, id);
+    if (html === null) return c.html(`<div class="error"><p>event not found</p></div>`, 404);
+    return c.html(html);
   });
+
+  // Dashboard entry: dynamic server-rendered page. Static files still serve
+  // other assets via serveStatic below; GET / itself is always the live page.
+  app.get("/", (c) => c.html(renderIndex(store, settings)));
 
   // Static dashboard assets; registered after every API route so API shapes
   // are never shadowed. Missing files fall through to the JSON notFound below.
