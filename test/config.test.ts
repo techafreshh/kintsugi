@@ -17,6 +17,8 @@ describe("loadSettings", () => {
       modelJudge: undefined,
       telegramBotToken: undefined,
       telegramChatId: undefined,
+      telegramEnabled: false,
+      telegramApiBaseUrl: undefined,
       dbPath: undefined,
       n8nBaseUrl: undefined,
       n8nApiKey: undefined,
@@ -34,6 +36,8 @@ describe("loadSettings", () => {
       MODEL_JUDGE: "judge-model",
       TELEGRAM_BOT_TOKEN: "tg-bot",
       TELEGRAM_CHAT_ID: "42",
+      TELEGRAM_NOTIFIER_ENABLED: "true",
+      TELEGRAM_API_BASE_URL: "https://tg.example", 
       KINTSUGI_DB_PATH: "data/kintsugi.db",
       N8N_BASE_URL: "https://n8n.example",
       N8N_API_KEY: "n8n-key",
@@ -48,6 +52,8 @@ describe("loadSettings", () => {
       modelJudge: "judge-model",
       telegramBotToken: "tg-bot",
       telegramChatId: "42",
+      telegramEnabled: true,
+      telegramApiBaseUrl: "https://tg.example",
       dbPath: "data/kintsugi.db",
       n8nBaseUrl: "https://n8n.example",
       n8nApiKey: "n8n-key",
@@ -59,6 +65,9 @@ describe("loadSettings", () => {
       DASHBOARD_TOKEN: "  ",
       NEBIUS_API_KEY: "",
       MODEL_FAST: "\t ",
+      TELEGRAM_BOT_TOKEN: " ",
+      TELEGRAM_CHAT_ID: "",
+      TELEGRAM_API_BASE_URL: "  ",
       KINTSUGI_DB_PATH: " ",
       N8N_BASE_URL: "\n ",
       N8N_API_KEY: " ",
@@ -66,9 +75,22 @@ describe("loadSettings", () => {
     expect(settings.dashboardToken).toBeUndefined();
     expect(settings.nebiusApiKey).toBeUndefined();
     expect(settings.modelFast).toBeUndefined();
+    expect(settings.telegramBotToken).toBeUndefined();
+    expect(settings.telegramChatId).toBeUndefined();
+    expect(settings.telegramApiBaseUrl).toBeUndefined();
     expect(settings.dbPath).toBeUndefined();
     expect(settings.n8nBaseUrl).toBeUndefined();
     expect(settings.n8nApiKey).toBeUndefined();
+  });
+
+  it("enables Telegram only on exact case-insensitive true; default off", () => {
+    expect(loadSettings({}).telegramEnabled).toBe(false);
+    expect(loadSettings({ TELEGRAM_NOTIFIER_ENABLED: "true" }).telegramEnabled).toBe(true);
+    expect(loadSettings({ TELEGRAM_NOTIFIER_ENABLED: " TRUE " }).telegramEnabled).toBe(true);
+    expect(loadSettings({ TELEGRAM_NOTIFIER_ENABLED: "True" }).telegramEnabled).toBe(true);
+    for (const off of ["1", "yes", "on", "enabled", "", "  ", "false", "tru"] as const) {
+      expect(loadSettings({ TELEGRAM_NOTIFIER_ENABLED: off }).telegramEnabled).toBe(false);
+    }
   });
 });
 
