@@ -107,9 +107,12 @@ function patchFixture(scenario: MockScenario): unknown {
   switch (scenario) {
     case "transient-429":
       return {
-        ops: [],
-        rationale: "Transient 429 needs no code change; back off and requeue.",
-        confidence: 0.72,
+        ops: [
+          { op: "set_retry", nodeId: "HttpRequest", retries: 3, retryOnFail: true },
+        ],
+        rationale:
+          "Transient 429 from the upstream: enable retry with backoff on the HttpRequest node so the replay succeeds once the failure window exhausts.",
+        confidence: 0.85,
       };
     case "human-broke-it":
       return {
@@ -147,9 +150,9 @@ function judgeFixture(scenario: MockScenario): unknown {
   switch (scenario) {
     case "transient-429":
       return {
-        verdict: "escalate",
-        reason: "Transient 429: no patch to approve, requeue with backoff.",
-        confidence: 0.66,
+        verdict: "approve",
+        reason: "Retry-with-backoff patch tracks the transient 429 diagnosis; the replay passes once the failure window exhausts.",
+        confidence: 0.9,
       };
     case "human-broke-it":
       return {
