@@ -6,6 +6,9 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
 import { loadSettings, type Settings } from "../config/settings.js";
+import { createOrchestrator, type Orchestrator } from "../orchestrator/orchestrator.js";
+import type { LLMPort } from "../llm/port.js";
+import { handleTelegramUpdate } from "../notify/telegram.js";
 import { openStore, type Store, type StoredRepairEvent } from "../store/store.js";
 
 /** Static roots tried in order: built output first, repo source fallback. */
@@ -14,6 +17,10 @@ const STATIC_ROOTS = ["dist/public", "public"] as const;
 export interface CreateAppOptions {
   store: Store;
   settings: Settings;
+  /** Shared orchestrator for Telegram callbacks; built from store/settings when unset. */
+  orchestrator?: Orchestrator | null | undefined;
+  /** Injectable Telegram transport for the webhook answer path; defaults to global fetch. */
+  fetchFn?: typeof fetch | null | undefined;
 }
 
 /** Pinned event JSON shape shared by the list/detail/action responses. */
@@ -64,8 +71,22 @@ function isAuthorized(c: Context, settings: Settings): boolean {
  * tests can inject `:memory:` stores while the module-level `app` singleton
  * below keeps the default file-backed wiring for `main()`.
  */
-export function createApp({ store, settings }: CreateAppOptions): Hono {
+export function createApp({ store, settings, orchestrator, fetchFn }: CreateAppOptions): Hono {
   const app = new Hono();
+
+  // Telegram approval callbacks go through the orchestrator (the only
+  // writer) so traces and snapshots stay consistent. The inert LLM never
+  // runs here: approve/reject touch only the store and the workflow map.
+  const inertLlm: LLMPort = {
+    name: "receiver",
+    mode: "mock",
+    submit_verdict: async () => {
+      throw new Error("receiver: LLM unavailable on the webhook path");
+    },
+  };
+  const telegramOrchestrator: Orchestrator =
+    orchestrator ?? createOrchestrator({ store, llm: inertLlm, settings });
+  const telegramFetchFn = typeof fetchFn === "function" ? fetchFn : undefined;
 
   app.get("/healthz", (c) => c.json({ ok: true }));
 
@@ -85,6 +106,34 @@ export function createApp({ store, settings }: CreateAppOptions): Hono {
     const { created } = store.insertEvent({ executionId: eventId, payload });
     // Pinned response shape: {"ok":true,"event_id":"<id>","created":<bool>}.
     return c.json({ ok: true, event_id: eventId, created });
+  });
+
+  app.post("/telegram/webhook", async (c) => {
+    const rawBody = await c.req.text();
+    let update: unknown;
+    try {
+      update = JSON.parse(rawBody);
+    } catch {
+      // Pinned contract: malformed JSON is a 400, never a 500, never a hang.
+      return c.json({ ok: false, error: "invalid JSON" }, 400);
+    }
+    try {
+      await handleTelegramUpdate(
+        update,
+        {
+          approve: (eventId: string) => telegramOrchestrator.approve(eventId),
+          reject: (eventId: string) => telegramOrchestrator.reject(eventId),
+        },
+        {
+          settings,
+          ...(telegramFetchFn !== undefined ? { fetchFn: telegramFetchFn } : {}),
+        },
+      );
+    } catch {
+      // Orchestrator throws (unknown event, wrong status) still answer 200:
+      // Telegram retries on non-2xx, and the stored status is unchanged.
+    }
+    return c.json({ ok: true });
   });
 
   app.get("/repair-events", (c) => {

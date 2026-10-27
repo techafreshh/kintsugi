@@ -8,6 +8,8 @@
  */
 
 import { Value } from "@sinclair/typebox/value";
+import { loadSettings, type Settings } from "../config/settings.js";
+import { sendApprovalCard } from "../notify/telegram.js";
 import { withTraces, type LLMPort } from "../llm/port.js";
 import { buildWorkflowView } from "../llm/workflowView.js";
 import { diagnose } from "../pipeline/diagnose.js";
@@ -64,6 +66,15 @@ export type VerifyFn = (input: VerifyInput) => VerifyResult | Promise<VerifyResu
 export interface OrchestratorDeps {
   store: Store;
   llm: LLMPort;
+  /** Telegram notifier settings; unset falls back to `loadSettings()`. Never required. */
+  settings?: Settings | null | undefined;
+  /** Injectable Telegram transport; tests pass a stub, production uses global fetch. */
+  fetchFn?: typeof fetch | null | undefined;
+  telegramFetchFn?: typeof fetch | null | undefined;
+  /** Override of the Telegram Bot API base URL (stub servers in tests). */
+  telegramApiBaseUrl?: string | null | undefined;
+  /** Per-request Telegram deadline in milliseconds. */
+  telegramTimeoutMs?: number | null | undefined;
   workflows?: unknown;
   workflowStore?: unknown;
   verifyFn?: VerifyFn | null | undefined;
@@ -150,6 +161,83 @@ function resolvePatchRunner(deps: OrchestratorDeps): PatchRunner | null {
 function resolveNowMs(deps: OrchestratorDeps): () => number {
   if (typeof deps.nowMs === "function") return deps.nowMs as () => number;
   return () => Date.now();
+}
+
+/** Telegram settings: explicit `deps.settings` wins, otherwise `loadSettings()`. */
+function resolveTelegramSettings(deps: OrchestratorDeps): Settings {
+  const direct = deps.settings;
+  if (direct !== undefined && direct !== null && typeof direct === "object") {
+    return direct as Settings;
+  }
+  const nested = (deps as Record<string, unknown>).telegram;
+  if (nested !== null && typeof nested === "object") {
+    const inner = (nested as Record<string, unknown>).settings;
+    if (inner !== undefined && inner !== null && typeof inner === "object") {
+      return inner as Settings;
+    }
+  }
+  return loadSettings();
+}
+
+/** Injectable Telegram fetch: explicit deps override wins, else global fetch. */
+function resolveTelegramFetchFn(deps: OrchestratorDeps): typeof fetch | undefined {
+  const candidates = [
+    deps.fetchFn,
+    deps.telegramFetchFn,
+    (deps as Record<string, unknown>).telegramFetch,
+    (deps as Record<string, unknown>).fetch,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "function") return candidate as typeof fetch;
+  }
+  const nested = (deps as Record<string, unknown>).telegram;
+  if (nested !== null && typeof nested === "object") {
+    const inner = (nested as Record<string, unknown>).fetchFn;
+    if (typeof inner === "function") return inner as typeof fetch;
+  }
+  return undefined;
+}
+
+/**
+ * Best-effort Tier-2 approval card on the `awaiting-approval` transition.
+ * Never throws and never touches the store: the orchestrator already
+ * recorded the outcome and status before this runs.
+ */
+async function notifyAwaitingApproval(
+  deps: OrchestratorDeps,
+  card: { eventId: string; tier: Tier; summary: unknown },
+): Promise<void> {
+  try {
+    const custom = (deps as Record<string, unknown>).notifyApprovalCard;
+    if (typeof custom === "function") {
+      await (custom as (card: unknown) => Promise<unknown>)({
+        eventId: card.eventId,
+        tier: card.tier,
+        diagnosisSummary: card.summary,
+      });
+      return;
+    }
+    const settings = resolveTelegramSettings(deps);
+    const fetchFn = resolveTelegramFetchFn(deps);
+    const nested = (deps as Record<string, unknown>).telegram;
+    const nestedApiBaseUrl =
+      nested !== null && typeof nested === "object"
+        ? (nested as Record<string, unknown>).apiBaseUrl
+        : undefined;
+    await sendApprovalCard(
+      { eventId: card.eventId, tier: card.tier, diagnosisSummary: card.summary },
+      settings,
+      {
+        ...(fetchFn !== undefined ? { fetchFn } : {}),
+        ...((typeof deps.telegramApiBaseUrl === "string" || typeof nestedApiBaseUrl === "string")
+          ? { apiBaseUrl: (deps.telegramApiBaseUrl ?? nestedApiBaseUrl) as string }
+          : {}),
+        ...(typeof deps.telegramTimeoutMs === "number" ? { timeoutMs: deps.telegramTimeoutMs } : {}),
+      },
+    );
+  } catch {
+    // Best-effort: notifier failures never fail the repair turn.
+  }
 }
 
 function deepClone<T>(value: T): T {
@@ -610,6 +698,9 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
       1,
     );
     setStatus("awaiting-approval");
+    // Tier-2 approval card (issue #19): best-effort Telegram send; a
+    // notifier failure never changes the return value or the stored status.
+    await notifyAwaitingApproval(deps, { eventId, tier, summary: judge.reason });
     recordDuration(startedAt);
     return { status: "awaiting-approval", eventId, tier };
   }

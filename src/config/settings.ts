@@ -15,6 +15,10 @@ export interface Settings {
   modelJudge: string | undefined;
   telegramBotToken: string | undefined;
   telegramChatId: string | undefined;
+  /** Opt-in Telegram approval cards; only the exact value `true` (trimmed, case-insensitive) enables sends. Default off. */
+  telegramEnabled: boolean;
+  /** Override of the Telegram Bot API base URL; blank means the built-in default. */
+  telegramApiBaseUrl: string | undefined;
   /** SQLite database file path; unset means the consumer wiring applies its default (kintsugi.db). */
   dbPath: string | undefined;
   /** n8n instance root (base URL the n8n client appends `/api/v1` to); unset disables n8n-backed flows. */
@@ -52,6 +56,16 @@ function optionalString(value: string | undefined): string | undefined {
 }
 
 /**
+ * Opt-in flag for Telegram approval cards: only the exact value `true`
+ * (trimmed, case-insensitive) enables sends; `1`/`yes`/blank/unset all mean
+ * off. Never throws.
+ */
+function isTelegramEnabledFlag(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  return value.trim().toLowerCase() === "true";
+}
+
+/**
  * Parsed once at startup by each module's wiring point — not a module-level
  * singleton, so env changes between tests never leak across imports.
  */
@@ -66,6 +80,8 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     modelJudge: optionalString(env.MODEL_JUDGE),
     telegramBotToken: optionalString(env.TELEGRAM_BOT_TOKEN),
     telegramChatId: optionalString(env.TELEGRAM_CHAT_ID),
+    telegramEnabled: isTelegramEnabledFlag(env.TELEGRAM_NOTIFIER_ENABLED),
+    telegramApiBaseUrl: optionalString(env.TELEGRAM_API_BASE_URL),
     dbPath: optionalString(env.KINTSUGI_DB_PATH),
     n8nBaseUrl: optionalString(env.N8N_BASE_URL),
     n8nApiKey: optionalString(env.N8N_API_KEY),
