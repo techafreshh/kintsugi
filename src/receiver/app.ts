@@ -23,6 +23,13 @@ export interface CreateAppOptions {
   fetchFn?: typeof fetch | null | undefined;
 }
 
+/** Wire spelling of a stored status (issue #26): the store keeps the
+ * hyphenated `awaiting-approval`, while HTTP responses show the
+ * underscored `awaiting_approval` the issue contract pins. */
+function wireStatus(status: string): string {
+  return status === "awaiting-approval" ? "awaiting_approval" : status;
+}
+
 /** Pinned event JSON shape shared by the list/detail/action responses. */
 function eventJson(row: StoredRepairEvent): {
   event_id: string;
@@ -32,7 +39,7 @@ function eventJson(row: StoredRepairEvent): {
 } {
   return {
     event_id: row.executionId,
-    status: row.status,
+    status: wireStatus(row.status),
     received_at: row.receivedAt,
     payload: row.payload,
   };
@@ -257,30 +264,43 @@ export function createApp({ store, settings, orchestrator, fetchFn }: CreateAppO
     });
   });
 
-  // Dashboard mutations behind the token gate. Every action succeeds on any
-  // stored status (the issue pins only 200/401/404); the status write plus a
-  // stage:"outcome" decision row mirror the orchestrator's recordDecision
+  // Dashboard mutations behind the token gate. The shared orchestrator is
+  // the writer (issue #26): approve promotes the parked restore via the
+  // workflow client, reject/revert flip the stored status. Every action
+  // still succeeds on any stored status (the issue pins only 200/401/404);
+  // the status write plus a stage:"outcome" decision row mirrors the orchestrator's recordDecision
   // convention so the orchestrator can take over the same rows later.
+  // An orchestrator refusal (e.g. approve from `received`, revert with no
+  // snapshot) falls back to the bare store write and still reports 200.
   const action =
-    (status: string, verdict: string, reason: string) =>
-    (c: Context): Response => {
+    (kind: "approve" | "reject" | "revert", status: string, verdict: string, reason: string) =>
+    async (c: Context): Promise<Response> => {
       if (!isAuthorized(c, settings)) return c.json({ error: "unauthorized" }, 401);
       const id = c.req.param("id");
       if (id === undefined) return c.json({ error: "event not found" }, 404);
       if (store.getEvent(id) === null) return c.json({ error: "event not found" }, 404);
       try {
-        store.insertDecision({ eventId: id, stage: "outcome", verdict, reason, confidence: 1 });
+        if (kind === "approve") await telegramOrchestrator.approve(id);
+        else if (kind === "reject") await telegramOrchestrator.reject(id);
+        else await telegramOrchestrator.revert(id);
       } catch {
-        // Decision rows are best-effort; the mutation still reports 200.
+        try {
+          store.insertDecision({ eventId: id, stage: "outcome", verdict, reason, confidence: 1 });
+        } catch {
+          // Decision rows are best-effort; the mutation still reports 200.
+        }
+        const fallback = store.updateEventStatus(id, status);
+        if (fallback === null) return c.json({ error: "not found" }, 404);
+        return c.json(eventJson(fallback));
       }
-      const updated = store.updateEventStatus(id, status);
+      const updated = store.getEvent(id);
       if (updated === null) return c.json({ error: "event not found" }, 404);
       return c.json(eventJson(updated));
     };
 
-  app.post("/repair-events/:id/approve", action("promoted", "promoted", "approved via dashboard"));
-  app.post("/repair-events/:id/reject", action("rejected", "rejected", "rejected via dashboard"));
-  app.post("/repair-events/:id/revert", action("reverted", "reverted", "reverted via dashboard"));
+  app.post("/repair-events/:id/approve", action("approve", "promoted", "promoted", "approved via dashboard"));
+  app.post("/repair-events/:id/reject", action("reject", "rejected", "rejected", "rejected via dashboard"));
+  app.post("/repair-events/:id/revert", action("revert", "reverted", "reverted", "reverted via dashboard"));
 
   // Dashboard entry: serve the built page when present, else a JSON 404 so the
   // API contract holds even before `npm run build` copies public/ to dist/.
