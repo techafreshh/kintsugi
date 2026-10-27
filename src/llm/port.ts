@@ -9,6 +9,7 @@
 
 import type { Static, TSchema } from "@sinclair/typebox";
 import { MockLLM } from "./mock.js";
+import { NebiusLLM } from "./nebius.js";
 
 /** Pipeline stages that ask the LLM for a verdict. */
 export type LlmStage = "diagnose" | "patch" | "judge";
@@ -36,9 +37,15 @@ export interface LLMPort {
 /**
  * Orchestrator switch-point with an injectable env map (mirroring
  * `loadSettings(env = process.env)` in `src/config/settings.ts`, so tests
- * never touch `process.env` directly). Always returns the mock until the
- * live Nebius provider lands in issue #10.
+ * never touch `process.env` directly). Returns the live Nebius provider
+ * when `NEBIUS_API_KEY` is set, otherwise the deterministic mock. The
+ * pi-ai dependency is only loaded inside `NebiusLLM` (lazy `await import`),
+ * so mock mode never touches it.
  */
 export function createLLM(env: NodeJS.ProcessEnv = process.env): LLMPort {
+  const apiKey = env.NEBIUS_API_KEY;
+  if (typeof apiKey === "string" && apiKey.trim() !== "") {
+    return new NebiusLLM(env);
+  }
   return new MockLLM(env);
 }
