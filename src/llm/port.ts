@@ -49,3 +49,9 @@ export function createLLM(env: NodeJS.ProcessEnv = process.env): LLMPort {
   }
   return new MockLLM(env);
 }
+
+/** Single import point for traced composition (issue #18): the orchestrator
+ * wraps its port via `withTraces`/`createTracedLLM` from here, so every
+ * `submit_verdict` call is audited without touching the `LLMPort` shape. */
+export { TracedLLM, withTraces, createTracedLLM, TRACE_TEXT_CAP } from "./traced.js";
+export type { TracedOptions } from "./traced.js";
