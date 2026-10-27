@@ -389,25 +389,40 @@ function assertScope(ops: PatchOp[], workflow: unknown, scope: string[]): void {
 
 /**
  * Existing-node names one op touches, for scope enforcement. `set_parameter`
- * paths resolve against the workflow's node names (longest match, like the
- * applier) with the scope entries as extra candidates so verbatim names with
- * spaces or dots match; unresolvable paths yield no names and surface later
- * as application errors. `add_node` checks only its `connectFrom`/`connectTo`
- * anchors — the new `node.name` is created, not affected.
+ * is checked by its authoritative `path` (longest match, like the applier)
+ * with the scope entries as extra candidates so verbatim names with spaces
+ * or dots match, plus a `node` field when one is smuggled in — every name
+ * returned must be in scope. Unresolvable paths yield no names and surface
+ * later as application errors. `add_node` checks only its
+ * `connectFrom`/`connectTo` anchors — the new `node.name` is created, not
+ * affected.
  */
 function scopeNamesForOp(op: PatchOp, candidates: string[]): string[] {
   const record = op as unknown as Record<string, unknown>;
-  if (typeof record.node === "string" && record.node !== "") return [record.node];
   switch (record.op) {
     case "set_parameter": {
-      if (typeof record.path !== "string") return [];
-      const name = extractNodeNameFromPath(record.path, candidates);
-      return name === null ? [] : [name];
+      const names: string[] = [];
+      if (typeof record.node === "string" && record.node !== "") names.push(record.node);
+      if (typeof record.path === "string") {
+        const name = extractNodeNameFromPath(record.path, candidates);
+        if (name !== null && !names.includes(name)) names.push(name);
+      }
+      return names;
     }
     case "set_retry":
     case "set_on_error":
-    case "remove_node":
-      return typeof record.nodeId === "string" && record.nodeId !== "" ? [record.nodeId] : [];
+    case "remove_node": {
+      const names: string[] = [];
+      if (typeof record.nodeId === "string" && record.nodeId !== "") names.push(record.nodeId);
+      if (
+        typeof record.node === "string" &&
+        record.node !== "" &&
+        !names.includes(record.node)
+      ) {
+        names.push(record.node);
+      }
+      return names;
+    }
     case "add_node": {
       const names: string[] = [];
       if (typeof record.connectFrom === "string" && record.connectFrom !== "") {
@@ -474,6 +489,12 @@ function splitApplierResult(applied: unknown, ops: PatchOp[]): RunPatchStageResu
     isPlainObject(applied.workflow) &&
     Array.isArray(applied.appliedOps)
   ) {
+    if (applied.appliedOps.length !== ops.length) {
+      throw patchError(
+        "apply",
+        `patch: apply failed: applier returned ${applied.appliedOps.length} appliedOps for ${ops.length} ops`,
+      );
+    }
     return {
       workflow: applied.workflow,
       appliedOps: (applied.appliedOps as unknown[]).map(
