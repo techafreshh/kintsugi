@@ -119,9 +119,25 @@ function patchFixture(scenario: MockScenario): unknown {
       };
     case "schema-drift":
     default:
+      // Set-only repair for the drifted demo chain: the upstream now serves
+      // `{ name, email, city }` while the Set node still maps the old paths
+      // (`full_name` / `contact.email` / `address.city`). Replacing the whole
+      // `parameters` object (a path every n8n Set node carries) keeps the op
+      // applicable to any Set shape while touching no other node; the target
+      // stays inside the diagnose scope (["HttpRequest", "Set"]).
       return {
-        ops: [{ op: "set_parameter", path: "nodes.Set.parameters.value", value: "={{ $json.renamed }}" }],
-        rationale: "Point the Set node at the renamed upstream field.",
+        ops: [
+          {
+            op: "set_parameter",
+            path: "nodes.Set.parameters",
+            value: {
+              name: "={{ $json.name }}",
+              email: "={{ $json.email }}",
+              city: "={{ $json.city }}",
+            },
+          },
+        ],
+        rationale: "Point the Set node at the renamed upstream fields (name, email, city).",
         confidence: 0.9,
       };
   }
