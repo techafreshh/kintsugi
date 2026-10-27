@@ -32,6 +32,9 @@ export const diagnoseVerdictSchema = Type.Object(
 
 export type DiagnoseVerdict = Static<typeof diagnoseVerdictSchema>;
 
+/** Contract alias: issue #11 prose calls the diagnose schema `diagnoseSchema`. */
+export const diagnoseSchema = diagnoseVerdictSchema;
+
 /** One path-level `set_parameter` edit; mirrors `SetParameterOp` in `src/patch/patchOps.ts`. */
 const setParameterOpSchema = Type.Object(
   {

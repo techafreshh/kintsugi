@@ -29,10 +29,14 @@ export class MockLLM implements LLMPort {
    * Resolve the active scenario from the injected env. Trims whitespace,
    * falls through on blank/missing/unknown (mirroring `resolvePort`
    * blank-falls-through in `src/config/settings.ts`); never throws.
+   * Also honors a `{ scenario }` option map (issue #11 prose constructs the
+   * mock with `{ scenario: "schema-drift" }`) so both call shapes work.
    */
   resolveScenario(): MockScenario {
-    const raw = this.env.MOCK_LLM_SCENARIO;
-    if (raw === undefined) return DEFAULT_SCENARIO;
+    const raw =
+      this.env.MOCK_LLM_SCENARIO ??
+      (this.env as Record<string, unknown>).scenario;
+    if (typeof raw !== "string") return DEFAULT_SCENARIO;
     const trimmed = raw.trim();
     if (trimmed === "") return DEFAULT_SCENARIO;
     return (SCENARIOS as readonly string[]).includes(trimmed)
@@ -151,3 +155,7 @@ function describeErrors(errors: Array<{ path: string; message: string }>): strin
   const first = errors.slice(0, 3).map((error) => `${error.path}: ${error.message}`);
   return first.length > 0 ? first.join("; ") : "unknown validation error";
 }
+
+/** Contract alias: issue #11 prose calls the mock `MockLLMPort`. */
+export const MockLLMPort = MockLLM;
+export type MockLLMPort = MockLLM;
