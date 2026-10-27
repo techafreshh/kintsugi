@@ -158,10 +158,16 @@ export interface Store {
   getEvent(executionId: string): StoredRepairEvent | null;
   /** Insertion order (rowid ASC). */
   listEvents(): StoredRepairEvent[];
+  /** Mutate an event's status; returns the refreshed row or `null` when missing. */
+  updateEventStatus(executionId: string, status: string): StoredRepairEvent | null;
+  /** Events filtered by status, in insertion order (uses `idx_events_status`). */
+  listEventsByStatus(status: string): StoredRepairEvent[];
 
   /** Idempotent by snapshot id (first write wins). */
   insertSnapshot(input: InsertSnapshotInput): { id: string; created: boolean };
   getSnapshot(id: string): StoredWorkflowSnapshot | null;
+  /** Snapshots for one event, in insertion order (uses `idx_snapshots_event`). */
+  listSnapshots(eventId: string): StoredWorkflowSnapshot[];
 
   /** Autoincrement id; `listDecisions` reads them back in insertion order. */
   insertDecision(input: InsertDecisionInput): StoredDecision;
@@ -314,12 +320,19 @@ export function openStore(path: string): Store {
     listEvents: db.prepare(
       "SELECT execution_id, status, received_at, payload FROM repair_events ORDER BY rowid ASC",
     ),
+    updateEventStatus: db.prepare("UPDATE repair_events SET status = ? WHERE execution_id = ?"),
+    listEventsByStatus: db.prepare(
+      "SELECT execution_id, status, received_at, payload FROM repair_events WHERE status = ? ORDER BY rowid ASC",
+    ),
 
     insertSnapshot: db.prepare(
       "INSERT INTO workflow_snapshots (id, event_id, kind, workflow_id, snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
     ),
     getSnapshot: db.prepare(
       "SELECT id, event_id, kind, workflow_id, snapshot, created_at FROM workflow_snapshots WHERE id = ?",
+    ),
+    listSnapshots: db.prepare(
+      "SELECT id, event_id, kind, workflow_id, snapshot, created_at FROM workflow_snapshots WHERE event_id = ? ORDER BY rowid ASC",
     ),
 
     insertDecision: db.prepare(
@@ -363,6 +376,14 @@ export function openStore(path: string): Store {
     listEvents(): StoredRepairEvent[] {
       return stmt.listEvents.all().map(mapEventRow);
     },
+    updateEventStatus(executionId: string, status: string): StoredRepairEvent | null {
+      stmt.updateEventStatus.run(status, executionId);
+      const row = stmt.getEvent.get(executionId);
+      return row === undefined ? null : mapEventRow(row);
+    },
+    listEventsByStatus(status: string): StoredRepairEvent[] {
+      return stmt.listEventsByStatus.all(status).map(mapEventRow);
+    },
 
     insertSnapshot(input: InsertSnapshotInput): { id: string; created: boolean } {
       const created = changesOf(
@@ -380,6 +401,9 @@ export function openStore(path: string): Store {
     getSnapshot(id: string): StoredWorkflowSnapshot | null {
       const row = stmt.getSnapshot.get(id);
       return row === undefined ? null : mapSnapshotRow(row);
+    },
+    listSnapshots(eventId: string): StoredWorkflowSnapshot[] {
+      return stmt.listSnapshots.all(eventId).map(mapSnapshotRow);
     },
 
     insertDecision(input: InsertDecisionInput): StoredDecision {
