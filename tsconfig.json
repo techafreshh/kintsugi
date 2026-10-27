@@ -21,6 +21,7 @@
   "include": [
     "src",
     "test",
+    "e2e",
     "vitest.config.ts"
   ]
 }

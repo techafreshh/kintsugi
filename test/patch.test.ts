@@ -61,7 +61,11 @@ describe("acceptance: schema-drift patch applies the op with one appliedOp per o
       affectedNodes: ["HttpRequest", "Set"],
       llm,
     });
-    expect(parameterOf(result.workflow, "Set", "value")).toBe("={{ $json.renamed }}");
+    // The schema-drift fixture replaces the Set mappings with the renamed
+    // upstream fields (name/email/city) in one Set-only op.
+    expect(parameterOf(result.workflow, "Set", "name")).toBe("={{ $json.name }}");
+    expect(parameterOf(result.workflow, "Set", "email")).toBe("={{ $json.email }}");
+    expect(parameterOf(result.workflow, "Set", "city")).toBe("={{ $json.city }}");
     expect(result.appliedOps).toHaveLength(1);
   });
 });

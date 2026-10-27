@@ -457,7 +457,7 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
     }
   }
 
-  function recordTierOutcome(tier: Tier, status: RepairStatus): void {
+  function recordTierOutcome(eventId: string, tier: Tier, status: RepairStatus, confidence: number): void {
     try {
       store.incrementMetric(`tier.${tier}`);
     } catch {
@@ -468,6 +468,16 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
     } catch {
       // Best-effort.
     }
+    // Per-event tier audit row: the detail endpoint derives its `tier` field
+    // from the latest `stage: "tier"` decision, so the tier is visible per
+    // event (metrics alone are global counters).
+    recordDecision(
+      eventId,
+      "tier",
+      tier,
+      `classified tier ${tier} for ${status}`,
+      Number.isFinite(confidence) ? confidence : 0,
+    );
   }
 
   async function loadLiveWorkflow(workflowId: string, payload: unknown): Promise<unknown> {
@@ -649,7 +659,7 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
 
     // Judge reject always parks as rejected.
     if (judge.verdict === "reject") {
-      recordTierOutcome(tier, "rejected");
+      recordTierOutcome(eventId, tier, "rejected", judge.confidence);
       recordDecision(eventId, "outcome", "rejected", judge.reason.slice(0, 500), judge.confidence);
       setStatus("rejected");
       recordDuration(startedAt);
@@ -682,14 +692,14 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
         recordDuration(startedAt);
         return { status: "failed", eventId, tier };
       }
-      recordTierOutcome(tier, "promoted");
+      recordTierOutcome(eventId, tier, "promoted", judge.confidence);
       recordDecision(eventId, "outcome", "promoted", "auto-promoted after green verification", 1);
       setStatus("promoted");
       recordDuration(startedAt);
       return { status: "promoted", eventId, tier };
     }
 
-    recordTierOutcome(tier, "awaiting-approval");
+    recordTierOutcome(eventId, tier, "awaiting-approval", judge.confidence);
     recordDecision(
       eventId,
       "outcome",

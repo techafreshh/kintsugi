@@ -39,6 +39,104 @@ function eventJson(row: StoredRepairEvent): {
 }
 
 /**
+ * Per-event tier for the detail response (issue #24): the latest
+ * `stage: "tier"` decision verdict, with the classifier's `auto-promote`
+ * aliased to the `auto` wording the issue contract uses. `null` when the
+ * event has not been through tier classification yet (e.g. freshly
+ * received, or promoted via the dashboard without a repair turn).
+ */
+function tierOf(store: Store, eventId: string): string | null {
+  let decisions: Array<{ stage: string; verdict: string }>;
+  try {
+    decisions = store.listDecisions(eventId);
+  } catch {
+    return null;
+  }
+  for (let index = decisions.length - 1; index >= 0; index -= 1) {
+    const decision = decisions[index];
+    if (decision === undefined || decision.stage !== "tier") continue;
+    return decision.verdict === "auto-promote" ? "auto" : decision.verdict;
+  }
+  return null;
+}
+
+/** Sandbox verification summary for the detail response (issue #24). */
+interface VerificationView {
+  /** True exactly when a `verified` verdict decision exists for the event. */
+  ok: boolean;
+  /** Transport that produced the replay (`run-endpoint`, ...), if recorded. */
+  strategy: string | null;
+  /** Replayed row count, if recorded. */
+  rowCount: number | null;
+  /** Where the replayed payload came from, if recorded. */
+  provenance: string | null;
+  /** Latest verify-decision reason text, if any. */
+  reason: string | null;
+}
+
+/**
+ * Build the verification block from the event's decision rows: `ok` comes
+ * from the `verify`-stage verdicts the orchestrator always writes, while
+ * `strategy`/`rowCount`/`provenance` come from the structured JSON reason
+ * of the richest `sandbox`/`verify` row (the E2E verify hook records one;
+ * the default green path has none, leaving those fields null but `ok`
+ * true). Never throws: store failures degrade to a red block, never a 500.
+ */
+function verificationOf(store: Store, eventId: string): VerificationView {
+  const red: VerificationView = {
+    ok: false,
+    strategy: null,
+    rowCount: null,
+    provenance: null,
+    reason: null,
+  };
+  let decisions: Array<{ stage: string; verdict: string; reason: string }>;
+  try {
+    decisions = store.listDecisions(eventId);
+  } catch {
+    return red;
+  }
+  let ok = false;
+  let reason: string | null = null;
+  let strategy: string | null = null;
+  let rowCount: number | null = null;
+  let provenance: string | null = null;
+  for (const decision of decisions) {
+    if (decision.stage === "verify") {
+      if (decision.verdict === "verified") ok = true;
+      reason = decision.reason;
+    }
+    if (decision.stage === "sandbox" || decision.stage === "verify") {
+      const parsed = parseJsonObject(decision.reason);
+      if (parsed !== null) {
+        if (strategy === null && typeof parsed.strategy === "string") {
+          strategy = parsed.strategy;
+        }
+        if (rowCount === null && typeof parsed.rowCount === "number") {
+          rowCount = parsed.rowCount;
+        }
+        if (provenance === null && typeof parsed.provenance === "string") {
+          provenance = parsed.provenance;
+        }
+      }
+    }
+  }
+  return { ok, strategy, rowCount, provenance, reason };
+}
+
+/** Parse a JSON object reason; non-objects and malformed JSON yield null. */
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Execution id of an n8n Error Trigger payload, looked up where it actually
  * appears (nested under execution, or flat). Callers fall back to a body hash.
  */
@@ -150,7 +248,13 @@ export function createApp({ store, settings, orchestrator, fetchFn }: CreateAppO
     const row = store.getEvent(id);
     // Pinned contract: unknown event id -> 404, never 5xx.
     if (row === null) return c.json({ error: "event not found" }, 404);
-    return c.json(eventJson(row));
+    // Detail-only extras: tier + verification log. The list/action shapes
+    // stay pinned; these fields are additive and never alter the base keys.
+    return c.json({
+      ...eventJson(row),
+      tier: tierOf(store, id),
+      verification: verificationOf(store, id),
+    });
   });
 
   // Dashboard mutations behind the token gate. Every action succeeds on any
