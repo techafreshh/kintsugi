@@ -3,7 +3,7 @@
  * `kintsugi` CLI entrypoint (issues #21/#22): one binary, multiple commands.
  *   kintsugi api        — serve the receiver dashboard + webhook API.
  *   kintsugi worker     — run the repair-loop poller until SIGINT/SIGTERM.
- *   kintsugi fix <id>   — not yet wired (stub: stderr message, exit 1).
+ *   kintsugi fix <id>   — inline single-event repair (see src/cli/fix.ts).
  *   kintsugi seed-demo  — run the demo seeder (issue #21): prints exactly two
  *     lines to stdout (`demo <id>`, `error-trigger <id>`) and exits 0.
  *     Missing n8n configuration exits 2 with a message on stderr.
@@ -81,10 +81,17 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     return;
   }
   if (subcommand === "fix") {
-    // Single-event repair wiring is later-slice territory; the stub pins the
-    // contract (stderr message, non-zero exit) without faking a repair.
-    console.error("kintsugi fix: not yet wired");
-    process.exit(1);
+    // Inline single-event repair (issue #23): real orchestrator turn plus
+    // stdout report; exit codes follow src/cli/fix.ts (0 turn done, 1 error).
+    const { runFix } = await import("./cli/fix.js");
+    const executionId = argv[3];
+    if (typeof executionId !== "string" || executionId.trim() === "") {
+      console.error("usage: kintsugi fix <event-id>");
+      process.exit(1);
+      return;
+    }
+    const { exitCode } = await runFix(executionId);
+    process.exit(exitCode);
     return;
   }
   usage();
