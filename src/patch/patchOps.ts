@@ -148,7 +148,7 @@ function applySetParameter(root: Record<string, unknown>, op: Record<string, unk
   setChild(current, segments[segments.length - 1] as string, deepClone(op.value));
 }
 
-/** `set_retry`: writes top-level `retryOnFail` plus `retries` on the node. */
+/** `set_retry`: writes top-level `retryOnFail` plus `retries` and the n8n-style `maxTries` alias on the node. */
 function applySetRetry(root: Record<string, unknown>, op: Record<string, unknown>): void {
   if (typeof op.nodeId !== "string" || op.nodeId === "") {
     throw new PatchValidationError(
@@ -171,6 +171,7 @@ function applySetRetry(root: Record<string, unknown>, op: Record<string, unknown
   }
   found.entry.retryOnFail = op.retryOnFail;
   found.entry.retries = op.retries;
+  found.entry.maxTries = op.retries;
 }
 
 /** `set_on_error`: mode must be in the `ON_ERROR_MODES` whitelist. */
