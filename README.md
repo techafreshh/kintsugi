@@ -64,7 +64,7 @@ How it works: every failed execution lands in the store via `POST /error-hook`. 
 | `POST` | `/repair-events/:id/approve` | Promote the parked fix; token-gated (`401` without `Authorization: Bearer <token>` when `DASHBOARD_TOKEN` is set) |
 | `POST` | `/repair-events/:id/reject` | Reject the parked fix; token-gated |
 | `POST` | `/repair-events/:id/revert` | Restore the baseline snapshot; token-gated |
-| `POST` | `/telegram/webhook` | Telegram approval callbacks; always `200 {"ok":true}` (failures never retry the sender) |
+| `POST` | `/telegram/webhook` | Telegram approval callbacks; `200 {"ok":true}` on valid updates (400 on malformed JSON; orchestrator failures still answer 200 so Telegram does not retry) |
 | `GET` | `/` | Dashboard page when built (`npm run build` copies `public/` to `dist/`); otherwise `404` JSON |
 
 Contract notes: unknown routes return JSON `404` (never 5xx); malformed JSON bodies return `400` (never 500, never hang). Detail responses alias the wire status `awaiting-approval` to `awaiting_approval` and the classifier tier `auto-promote` to `auto`. The detail `verification` block is `{ok, strategy, rowCount, provenance, reason}` — `ok` is true exactly when a `verified` verdict exists for the event.
