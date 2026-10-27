@@ -570,6 +570,116 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
       return { status: "failed", eventId };
     }
 
+    // Human-broke-it restore-from-baseline park (issue #26): a hand edit
+    // broke the Code node, so the only byte-equal repair is the baseline
+    // snapshot — the LLM cannot know the fixture's arbitrary mutation, so
+    // the patch path could never reconstruct it. Park the restore as a
+    // durable `proposed` patch for approval instead. On lookup miss, fall
+    // through to the normal patch path.
+    if (
+      isPlainObject(diagnosis) &&
+      (diagnosis as Record<string, unknown>).rootCauseKind === "human-broke-it"
+    ) {
+      const baseline =
+        typeof store.findBaselineSnapshot === "function"
+          ? (store as Store).findBaselineSnapshot(workflowId)
+          : null;
+      if (baseline !== null) {
+        const restored = deepClone(baseline.snapshot);
+        try {
+          store.insertSnapshot({
+            id: `${eventId}:proposed`,
+            eventId,
+            kind: "proposed",
+            workflowId,
+            snapshot: deepClone(restored),
+          });
+        } catch {
+          // Best-effort: the in-memory pendingPatched entry still carries the restore.
+        }
+        setStatus("patched");
+        pendingPatched.set(eventId, { workflowId, workflow: deepClone(restored) });
+        recordDecision(eventId, "patch", "patched", "restored baseline snapshot for approval", 1);
+
+        // Sandbox verify of the restore (injected; defaults to green).
+        let restoreVerify: VerifyResult;
+        try {
+          const produced = await verifyFn({
+            eventId,
+            workflowId,
+            workflow: live,
+            patched: restored,
+            runData,
+          });
+          restoreVerify = normalizeVerify(produced);
+          recordDecision(
+            eventId,
+            "verify",
+            restoreVerify.ok ? "verified" : "unverified",
+            restoreVerify.ok ? "sandbox replay green" : "sandbox replay found failures",
+            restoreVerify.ok ? 1 : 0,
+          );
+        } catch (cause) {
+          const message = cause instanceof Error ? cause.message : String(cause);
+          restoreVerify = { ok: false, failures: [{ message }] };
+          recordDecision(eventId, "verify", "failed", message.slice(0, 500), 0);
+        }
+        setStatus("verified");
+
+        // Judge verdict (validated loudly like the diagnose stage).
+        let restoreJudge: JudgeVerdict;
+        try {
+          const raw = await traced.submit_verdict(
+            "judge",
+            { diagnose: diagnosis, patched: restored, verify: restoreVerify },
+            judgeVerdictSchema,
+          );
+          if (!Value.Check(judgeVerdictSchema, raw)) {
+            throw new Error("orchestrator: judge verdict failed judgeVerdictSchema validation");
+          }
+          restoreJudge = raw as JudgeVerdict;
+          recordDecision(
+            eventId,
+            "judge",
+            restoreJudge.verdict,
+            restoreJudge.reason.slice(0, 500),
+            restoreJudge.confidence,
+          );
+        } catch (cause) {
+          const message = cause instanceof Error ? cause.message : String(cause);
+          recordDecision(eventId, "judge", "failed", message.slice(0, 500), 0);
+          setStatus("failed");
+          try {
+            store.incrementMetric("outcome.failed");
+          } catch {
+            // Best-effort.
+          }
+          recordDuration(startedAt);
+          return { status: "failed", eventId };
+        }
+
+        // A Code-node hand edit always needs a human confirmation: park the
+        // restore at tier `approve` regardless of the gate outcome.
+        const restoreTier: Tier = "approve";
+        recordTierOutcome(eventId, restoreTier, "awaiting-approval", restoreJudge.confidence);
+        recordDecision(
+          eventId,
+          "outcome",
+          "awaiting-approval",
+          `parked restore-from-baseline for approval (tier ${restoreTier})`,
+          1,
+        );
+        setStatus("awaiting-approval");
+        await notifyAwaitingApproval(deps, {
+          eventId,
+          tier: restoreTier,
+          summary: restoreJudge.reason,
+        });
+        recordDuration(startedAt);
+        return { status: "awaiting-approval", eventId, tier: restoreTier };
+      }
+    }
+
     // Patch: plan + apply via the injected runner or the real stage.
     let patched: unknown;
     try {
@@ -720,7 +830,7 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
     const startedAt = nowMs();
     const loaded = store.getEvent(eventId);
     if (loaded === null) throw new Error(`orchestrator: unknown event ${eventId}`);
-    if (loaded.status !== "awaiting-approval") {
+    if (loaded.status !== "awaiting-approval" && loaded.status !== "awaiting_approval") {
       throw new Error(`orchestrator: cannot approve event ${eventId} from status ${loaded.status}`);
     }
     const workflowId = resolveWorkflowId(eventId, loaded.payload, workflows);
@@ -732,7 +842,16 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
     }
     const explicit = normalizePatchedArg(second) ?? patchedFromFirst(first);
     const cached = pendingPatched.get(eventId);
-    const patched = explicit !== undefined ? explicit : (cached?.workflow ?? live);
+    // Durable restore source (issue #26): the parked `proposed` snapshot
+    // survives process restarts, so approval promotes the restore even when
+    // the in-memory cache is empty.
+    let proposed: unknown;
+    try {
+      proposed = store.getSnapshot(`${eventId}:proposed`)?.snapshot ?? undefined;
+    } catch {
+      proposed = undefined;
+    }
+    const patched = explicit !== undefined ? explicit : (cached?.workflow ?? proposed ?? live);
 
     try {
       store.insertSnapshot({

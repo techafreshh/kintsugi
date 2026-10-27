@@ -86,9 +86,9 @@ function diagnoseFixture(scenario: MockScenario): unknown {
     case "human-broke-it":
       return {
         rootCauseKind: "human-broke-it",
-        failureClass: "manual edit broke expression",
-        affectedNodes: ["Set"],
-        reasoning: "A hand edit left an expression referencing a renamed node; restore the reference.",
+        failureClass: "manual edit broke Code node",
+        affectedNodes: ["Code"],
+        reasoning: "A hand edit broke the Code node's script; restore the baseline Code node.",
         confidence: 0.88,
       };
     case "schema-drift":
@@ -116,8 +116,8 @@ function patchFixture(scenario: MockScenario): unknown {
       };
     case "human-broke-it":
       return {
-        ops: [{ op: "set_parameter", path: "nodes.Set.parameters.value", value: "={{ $json.fixed }}" }],
-        rationale: "Restore the expression the manual edit broke.",
+        ops: [{ op: "set_parameter", path: "nodes.Code.parameters", value: { jsCode: "// restored" } }],
+        rationale: "Restore the Code node parameters the manual edit broke.",
         confidence: 0.84,
       };
     case "schema-drift":

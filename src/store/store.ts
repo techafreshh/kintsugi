@@ -168,6 +168,13 @@ export interface Store {
   getSnapshot(id: string): StoredWorkflowSnapshot | null;
   /** Snapshots for one event, in insertion order (uses `idx_snapshots_event`). */
   listSnapshots(eventId: string): StoredWorkflowSnapshot[];
+  /**
+   * Restore source for the human-broke-it park (issue #26): the latest
+   * `kind: "baseline"` row for the workflow id across events, else the
+   * earliest same-workflow snapshot of any kind, else `null`. Never throws
+   * on missing rows (returns `null`); statement failures propagate.
+   */
+  findBaselineSnapshot(workflowId: string): StoredWorkflowSnapshot | null;
 
   /** Autoincrement id; `listDecisions` reads them back in insertion order. */
   insertDecision(input: InsertDecisionInput): StoredDecision;
@@ -334,6 +341,12 @@ export function openStore(path: string): Store {
     listSnapshots: db.prepare(
       "SELECT id, event_id, kind, workflow_id, snapshot, created_at FROM workflow_snapshots WHERE event_id = ? ORDER BY rowid ASC",
     ),
+    findBaselineSnapshot: db.prepare(
+      "SELECT id, event_id, kind, workflow_id, snapshot, created_at FROM workflow_snapshots WHERE workflow_id = ? AND kind = 'baseline' ORDER BY rowid DESC LIMIT 1",
+    ),
+    findEarliestSnapshotByWorkflow: db.prepare(
+      "SELECT id, event_id, kind, workflow_id, snapshot, created_at FROM workflow_snapshots WHERE workflow_id = ? ORDER BY rowid ASC LIMIT 1",
+    ),
 
     insertDecision: db.prepare(
       "INSERT INTO decisions (event_id, stage, verdict, reason, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -404,6 +417,12 @@ export function openStore(path: string): Store {
     },
     listSnapshots(eventId: string): StoredWorkflowSnapshot[] {
       return stmt.listSnapshots.all(eventId).map(mapSnapshotRow);
+    },
+    findBaselineSnapshot(workflowId: string): StoredWorkflowSnapshot | null {
+      const baseline = stmt.findBaselineSnapshot.get(workflowId);
+      if (baseline !== undefined) return mapSnapshotRow(baseline);
+      const earliest = stmt.findEarliestSnapshotByWorkflow.get(workflowId);
+      return earliest === undefined ? null : mapSnapshotRow(earliest);
     },
 
     insertDecision(input: InsertDecisionInput): StoredDecision {
