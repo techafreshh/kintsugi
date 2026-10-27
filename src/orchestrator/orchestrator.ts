@@ -8,7 +8,7 @@
  */
 
 import { Value } from "@sinclair/typebox/value";
-import type { LLMPort } from "../llm/port.js";
+import { withTraces, type LLMPort } from "../llm/port.js";
 import { buildWorkflowView } from "../llm/workflowView.js";
 import { diagnose } from "../pipeline/diagnose.js";
 import { runPatchStage } from "../pipeline/patch.js";
@@ -346,43 +346,12 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
   const nowMs = resolveNowMs(deps);
   const pendingPatched = new Map<string, { workflowId: string; workflow: unknown }>();
 
-  const llmName = typeof (llm as LLMPort).name === "string" ? (llm as LLMPort).name : "unknown";
-  const llmMode = typeof (llm as LLMPort).mode === "string" ? (llm as LLMPort).mode : "mock";
-
   function recordDuration(startedAt: number): void {
     try {
       const elapsed = nowMs() - startedAt;
       store.incrementMetric("repair.duration_ms", Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : 0);
     } catch {
       // Metrics are best-effort; a metric failure never fails the repair.
-    }
-  }
-
-  function recordTrace(input: {
-    eventId: string;
-    stage: string;
-    prompt: unknown;
-    response: unknown;
-    verdict: unknown;
-    error: unknown;
-    durationMs: number;
-  }): void {
-    try {
-      store.insertTrace({
-        eventId: input.eventId,
-        stage: input.stage,
-        model: llmName,
-        llmMode,
-        durationMs: Number.isFinite(input.durationMs) ? Math.max(0, Math.round(input.durationMs)) : 0,
-        tokensIn: 0,
-        tokensOut: 0,
-        prompt: typeof input.prompt === "string" ? input.prompt : JSON.stringify(input.prompt) ?? "",
-        response: typeof input.response === "string" ? input.response : JSON.stringify(input.response) ?? "",
-        verdict: input.verdict,
-        error: input.error === null || input.error === undefined ? null : String(input.error),
-      });
-    } catch {
-      // Traces are best-effort.
     }
   }
 
@@ -441,6 +410,9 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
   async function runRepairTurn(first: string | unknown, ...rest: unknown[]): Promise<RepairTurnResult> {
     const eventId = normalizeEventId(first);
     const startedAt = nowMs();
+    // Every LLM call in this turn runs through the traced wrapper, so
+    // diagnose/patch/judge verdicts are all audited in `llm_traces`.
+    const traced = withTraces(llm as LLMPort, store, eventId);
     const loaded = store.getEvent(eventId);
     if (loaded === null) throw new Error(`orchestrator: unknown event ${eventId}`);
     let workflowId = resolveWorkflowId(eventId, loaded.payload, workflows);
@@ -477,18 +449,7 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
     // Diagnose: a throw parks the event as failed with no promotion.
     let diagnosis: unknown;
     try {
-      const t0 = nowMs();
-      diagnosis = await diagnose(llm as LLMPort, view);
-      const elapsed = nowMs() - t0;
-      recordTrace({
-        eventId,
-        stage: "diagnose",
-        prompt: "diagnose",
-        response: diagnosis,
-        verdict: diagnosis,
-        error: null,
-        durationMs: elapsed,
-      });
+      diagnosis = await diagnose(traced, view);
       recordDecision(
         eventId,
         "diagnose",
@@ -500,15 +461,6 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
       );
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      recordTrace({
-        eventId,
-        stage: "diagnose",
-        prompt: "diagnose",
-        response: null,
-        verdict: null,
-        error: message,
-        durationMs: 0,
-      });
       recordDecision(eventId, "diagnose", "failed", message.slice(0, 500), 0);
       setStatus("failed");
       try {
@@ -524,13 +476,13 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
     let patched: unknown;
     try {
       if (patchRunner !== null) {
-        const produced = await patchRunner({ workflow: deepClone(live), diagnose: diagnosis, llm: llm as LLMPort });
+        const produced = await patchRunner({ workflow: deepClone(live), diagnose: diagnosis, llm: traced });
         patched = unwrapPatched(produced);
       } else {
         const result = await runPatchStage({
           workflow: deepClone(live),
           diagnose: diagnosis,
-          llm: llm as LLMPort,
+          llm: traced,
         });
         patched = result.workflow;
       }
@@ -572,8 +524,7 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
     // Judge verdict (validated loudly like the diagnose stage).
     let judge: JudgeVerdict;
     try {
-      const t0 = nowMs();
-      const raw = await (llm as LLMPort).submit_verdict(
+      const raw = await traced.submit_verdict(
         "judge",
         { diagnose: diagnosis, patched, verify: verification },
         judgeVerdictSchema,
@@ -582,28 +533,9 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
         throw new Error("orchestrator: judge verdict failed judgeVerdictSchema validation");
       }
       judge = raw as JudgeVerdict;
-      const elapsed = nowMs() - t0;
-      recordTrace({
-        eventId,
-        stage: "judge",
-        prompt: "judge",
-        response: judge,
-        verdict: judge,
-        error: null,
-        durationMs: elapsed,
-      });
       recordDecision(eventId, "judge", judge.verdict, judge.reason.slice(0, 500), judge.confidence);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      recordTrace({
-        eventId,
-        stage: "judge",
-        prompt: "judge",
-        response: null,
-        verdict: null,
-        error: message,
-        durationMs: 0,
-      });
       recordDecision(eventId, "judge", "failed", message.slice(0, 500), 0);
       setStatus("failed");
       try {
