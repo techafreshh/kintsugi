@@ -22,6 +22,8 @@ describe("loadSettings", () => {
       dbPath: undefined,
       n8nBaseUrl: undefined,
       n8nApiKey: undefined,
+      mockUpstreamUrl: undefined,
+      publicUrl: undefined,
     });
   });
 
@@ -41,6 +43,8 @@ describe("loadSettings", () => {
       KINTSUGI_DB_PATH: "data/kintsugi.db",
       N8N_BASE_URL: "https://n8n.example",
       N8N_API_KEY: "n8n-key",
+      MOCK_UPSTREAM_URL: "http://chaos.example:3001",
+      KINTSUGI_PUBLIC_URL: "https://kintsugi.example",
     };
     expect(loadSettings(env)).toEqual({
       port: 9911,
@@ -57,6 +61,8 @@ describe("loadSettings", () => {
       dbPath: "data/kintsugi.db",
       n8nBaseUrl: "https://n8n.example",
       n8nApiKey: "n8n-key",
+      mockUpstreamUrl: "http://chaos.example:3001",
+      publicUrl: "https://kintsugi.example",
     });
   });
 
@@ -71,6 +77,8 @@ describe("loadSettings", () => {
       KINTSUGI_DB_PATH: " ",
       N8N_BASE_URL: "\n ",
       N8N_API_KEY: " ",
+      MOCK_UPSTREAM_URL: "  ",
+      KINTSUGI_PUBLIC_URL: "",
     });
     expect(settings.dashboardToken).toBeUndefined();
     expect(settings.nebiusApiKey).toBeUndefined();
@@ -81,6 +89,8 @@ describe("loadSettings", () => {
     expect(settings.dbPath).toBeUndefined();
     expect(settings.n8nBaseUrl).toBeUndefined();
     expect(settings.n8nApiKey).toBeUndefined();
+    expect(settings.mockUpstreamUrl).toBeUndefined();
+    expect(settings.publicUrl).toBeUndefined();
   });
 
   it("enables Telegram only on exact case-insensitive true; default off", () => {

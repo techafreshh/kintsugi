@@ -191,6 +191,48 @@ describe("listExecutions", () => {
   });
 });
 
+describe("listWorkflows", () => {
+  it("returns items from the bare-array envelope with the API key header", async () => {
+    const client = new N8nClient({ baseUrl: stub.baseUrl(), apiKey: "k" });
+    const workflows = [{ id: "wf-1", name: "a" }, { id: "wf-2", name: "b" }];
+    stub.setHandler((req, res) => {
+      if (req.method === "GET" && req.url === "/api/v1/workflows") {
+        return respond(res, 200, workflows);
+      }
+      return respond(res, 500, { message: `stub: unexpected ${req.method} ${req.url}` });
+    });
+
+    expect(await client.listWorkflows()).toEqual(workflows);
+    expect(stub.requests[0]?.method).toBe("GET");
+    expect(stub.requests[0]?.url).toBe("/api/v1/workflows");
+    expect(stub.requests[0]?.headers["x-n8n-api-key"]).toBe("k");
+  });
+
+  it("unwraps the {data:[...]} envelope real n8n returns", async () => {
+    const client = new N8nClient({ baseUrl: stub.baseUrl(), apiKey: "k" });
+    const workflows = [{ id: "wf-1", name: "a" }];
+    stub.setHandler((req, res) => {
+      if (req.method === "GET" && req.url === "/api/v1/workflows") {
+        return respond(res, 200, { data: workflows });
+      }
+      return respond(res, 500, { message: `stub: unexpected ${req.method} ${req.url}` });
+    });
+
+    expect(await client.listWorkflows()).toEqual(workflows);
+  });
+
+  it("returns [] for an unexpected body shape and rejects non-2xx with the status", async () => {
+    const client = new N8nClient({ baseUrl: stub.baseUrl(), apiKey: "k" });
+    stub.setHandler((_req, res) => respond(res, 200, { ok: true }));
+    expect(await client.listWorkflows()).toEqual([]);
+
+    stub.setHandler((_req, res) => respond(res, 500, { message: "internal error" }));
+    const error = await client.listWorkflows().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("500");
+  });
+});
+
 describe("probeRunEndpoint", () => {
   it("returns true on 200, false on 404, and probes with POST", async () => {
     const client = new N8nClient({ baseUrl: stub.baseUrl(), apiKey: "k" });
