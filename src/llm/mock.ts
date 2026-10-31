@@ -1,6 +1,7 @@
 /**
- * Pinned contract (issue #9): deterministic scenario-aware mock of
- * `LLMPort`. Reads `MOCK_LLM_SCENARIO` on every `submit_verdict` call
+ * Pinned contract (issue #9, selection via issue #74): deterministic scenario-aware mock of
+ * `LLMPort`, selected through `createLLM` when `KINTSUGI_MOCK_LLM=1`.
+ * Reads `MOCK_LLM_SCENARIO` on every `submit_verdict` call
  * (constructor-injected env map defaulting to `process.env`, mirroring
  * `N8nClientConfig` in `src/n8n/client.ts`), normalizes blank/unknown to
  * `schema-drift`, and returns a fixed per-(scenario, stage) fixture whose

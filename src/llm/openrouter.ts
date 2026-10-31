@@ -1,14 +1,14 @@
 /**
- * Pinned contract (issue #10): `NebiusLLM` implements `LLMPort` on top of
+ * Pinned contract (issue #74): `OpenRouterLLM` implements `LLMPort` on top of
  * `@earendil-works/pi-ai`'s OpenAI-compatible custom provider pointed at
- * Nebius. Stage routing is `diagnose`→`MODEL_REASON`, `patch`→`MODEL_FAST`,
+ * OpenRouter. Stage routing is `diagnose`→`MODEL_REASON`, `patch`→`MODEL_FAST`,
  * `judge`→`MODEL_JUDGE` with blank-falls-through to the first non-blank of
  * the three and a hardcoded last resort. Each `submit_verdict` sends one
  * `models.complete()` call carrying a single `submit_verdict` tool whose
  * `parameters` is the caller's TypeBox schema verbatim, takes the tool-call
  * `arguments` (or a text-JSON fallback), validates via the shared `validate`
  * helper, retries the whole call at most once, and throws otherwise. The
- * pi-ai stack is loaded lazily so mock mode never touches it; the
+ * pi-ai stack is loaded lazily so mock/off modes never touch it; the
  * constructor-injected key is passed as the per-request `apiKey` override so
  * tests never depend on ambient `process.env`. Caller prompts are forwarded
  * verbatim — no sanitization or prompt building here.
@@ -18,11 +18,11 @@ import type { Static, TSchema } from "@sinclair/typebox";
 import { validate } from "./schemas.js";
 import type { LlmMode, LlmStage, LLMPort } from "./port.js";
 
-/** Nebius OpenAI-compatible endpoint used when `NEBIUS_BASE_URL` is unset. */
-const DEFAULT_BASE_URL = "https://api.studio.nebius.com/v1";
+/** OpenRouter OpenAI-compatible endpoint used when `OPENROUTER_BASE_URL` is unset. */
+const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 
 /** Last-resort model when all of `MODEL_FAST`/`MODEL_REASON`/`MODEL_JUDGE` are blank. */
-const FALLBACK_MODEL = "meta-llama/Meta-Llama-3.1-70B-Instruct";
+const FALLBACK_MODEL = "openrouter/auto";
 
 /**
  * Absent, empty, or whitespace-only values mean "unset" (mirrors
@@ -74,9 +74,9 @@ interface LoadedStack {
   complete: (modelId: string, context: any, options: any) => Promise<any>;
 }
 
-export class NebiusLLM implements LLMPort {
-  readonly name = "nebius";
-  readonly mode: LlmMode = "live";
+export class OpenRouterLLM implements LLMPort {
+  readonly name = "openrouter";
+  readonly mode: LlmMode = "openrouter";
 
   private readonly apiKey: string;
   private readonly baseUrl: string;
@@ -86,12 +86,12 @@ export class NebiusLLM implements LLMPort {
   private stackPromise: Promise<LoadedStack> | null = null;
 
   constructor(env: NodeJS.ProcessEnv = process.env) {
-    const apiKey = optionalString(env.NEBIUS_API_KEY);
+    const apiKey = optionalString(env.OPENROUTER_API_KEY);
     if (apiKey === undefined) {
-      throw new Error("nebius: NEBIUS_API_KEY is required for live mode");
+      throw new Error("openrouter: OPENROUTER_API_KEY is required for live mode");
     }
     this.apiKey = apiKey;
-    this.baseUrl = optionalString(env.NEBIUS_BASE_URL) ?? DEFAULT_BASE_URL;
+    this.baseUrl = optionalString(env.OPENROUTER_BASE_URL) ?? DEFAULT_BASE_URL;
     this.modelFast = optionalString(env.MODEL_FAST);
     this.modelReason = optionalString(env.MODEL_REASON);
     this.modelJudge = optionalString(env.MODEL_JUDGE);
@@ -123,14 +123,14 @@ export class NebiusLLM implements LLMPort {
         // the raw error never leaks (mirrors `N8nClient.send`); the loop
         // retries once before the final throw.
         if (attempt === 1) {
-          throw new Error(`nebius: stage "${stage}" request failed (${lastValidationSummary})`, {
+          throw new Error(`openrouter: stage "${stage}" request failed (${lastValidationSummary})`, {
             cause,
           });
         }
         continue;
       }
     }
-    throw new Error(`nebius: stage "${stage}" verdict failed validation: ${lastValidationSummary}`);
+    throw new Error(`openrouter: stage "${stage}" verdict failed validation: ${lastValidationSummary}`);
   }
 
   private async requestOnce<T extends TSchema>(
@@ -164,7 +164,7 @@ export class NebiusLLM implements LLMPort {
         { apiKey: this.apiKey },
       );
     } catch (cause) {
-      throw new Error(`nebius: request failed (${describeFailure(cause)})`, { cause });
+      throw new Error(`openrouter: request failed (${describeFailure(cause)})`, { cause });
     }
     const blocks = Array.isArray(message?.content) ? message.content : [];
     const toolBlock = blocks.find(
@@ -220,7 +220,7 @@ export class NebiusLLM implements LLMPort {
       id,
       name: id,
       api: "openai-completions" as const,
-      provider: "nebius" as const,
+      provider: "openrouter" as const,
       baseUrl,
       input: ["text" as const],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -229,10 +229,10 @@ export class NebiusLLM implements LLMPort {
       maxTokens: 8192,
     }));
     const provider = createProvider({
-      id: "nebius",
-      name: "Nebius",
+      id: "openrouter",
+      name: "OpenRouter",
       baseUrl,
-      auth: { apiKey: envApiKeyAuth("Nebius API key", ["NEBIUS_API_KEY"]) },
+      auth: { apiKey: envApiKeyAuth("OpenRouter API key", ["OPENROUTER_API_KEY"]) },
       models,
       api: openAICompletionsApi(),
     });

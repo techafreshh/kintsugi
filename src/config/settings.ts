@@ -8,8 +8,11 @@
 export interface Settings {
   port: number;
   dashboardToken: string | undefined;
-  nebiusApiKey: string | undefined;
-  nebiusBaseUrl: string | undefined;
+  llmProvider: string | undefined;
+  openrouterApiKey: string | undefined;
+  openrouterBaseUrl: string | undefined;
+  deepseekApiKey: string | undefined;
+  deepseekBaseUrl: string | undefined;
   modelFast: string | undefined;
   modelReason: string | undefined;
   modelJudge: string | undefined;
@@ -77,8 +80,11 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
   return {
     port: resolvePort(env),
     dashboardToken: optionalString(env.DASHBOARD_TOKEN),
-    nebiusApiKey: optionalString(env.NEBIUS_API_KEY),
-    nebiusBaseUrl: optionalString(env.NEBIUS_BASE_URL),
+    llmProvider: optionalString(env.LLM_PROVIDER),
+    openrouterApiKey: optionalString(env.OPENROUTER_API_KEY),
+    openrouterBaseUrl: optionalString(env.OPENROUTER_BASE_URL),
+    deepseekApiKey: optionalString(env.DEEPSEEK_API_KEY),
+    deepseekBaseUrl: optionalString(env.DEEPSEEK_BASE_URL),
     modelFast: optionalString(env.MODEL_FAST),
     modelReason: optionalString(env.MODEL_REASON),
     modelJudge: optionalString(env.MODEL_JUDGE),
