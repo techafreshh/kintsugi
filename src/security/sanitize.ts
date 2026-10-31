@@ -143,6 +143,42 @@ const INSTRUCTION_LINE_PATTERNS: readonly RegExp[] = [
 ];
 
 /**
+ * Search-result field cleaner (issue #76): coerces one raw `title`/`url`/
+ * `snippet` hit into sanitized evidence strings for the enriched diagnose
+ * prompt. Non-string fields become `""` (never throws); string fields go
+ * through `sanitize()` so invisible characters, homoglyph tricks, and
+ * instruction-shaped lines cannot ride search snippets into the prompt.
+ * Flagged lines stay in the text — sanitize flags, it never destroys
+ * evidence content the diagnoser may need.
+ */
+export interface SanitizedSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+export function sanitizeSearchResult(result: unknown): SanitizedSearchResult {
+  const record =
+    typeof result === "object" && result !== null
+      ? (result as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+  return {
+    title: sanitizeField(record.title),
+    url: sanitizeField(record.url),
+    snippet: sanitizeField(record.snippet),
+  };
+}
+
+/** One evidence field: non-strings become `""`, strings are sanitized. Never throws. */
+function sanitizeField(value: unknown): string {
+  if (typeof value !== "string") return "";
+  try {
+    return sanitize(value).text;
+  } catch {
+    return "";
+  }
+}
+/**
  * Sanitize untrusted text before prompt binding. Pipeline order matters:
  * strip invisibles first (so split-word trickery collapses), then decompose
  * homoglyphs per codepoint, then confusables-map leftovers, and only then scan

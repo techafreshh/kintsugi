@@ -118,6 +118,8 @@ Every variable is optional: unset (or blank) disables the feature that uses it, 
 | `KINTSUGI_DB_PATH` | `kintsugi.db` in the working directory | SQLite file for repair events, snapshots, decisions, LLM traces, and metrics. Use `:memory:` only for scratch/testing. |
 | `N8N_BASE_URL` | unset (n8n flows off) | n8n instance root URL (the client appends `/api/v1`); both this and `N8N_API_KEY` blank keeps every n8n-backed flow off. |
 | `N8N_API_KEY` | unset (n8n flows off) | n8n API key sent as `X-N8N-API-KEY` on every client request. |
+| `TINYFISH_API_KEY` | unset (search off) | TinyFish search credentials; unset (or blank) keeps diagnose enrichment offline with zero outbound search calls. |
+| `TINYFISH_API_BASE_URL` | built-in default | Override of the TinyFish search base URL (`https://agent.tinyfish.ai`); blank means the built-in default. |
 | `MOCK_UPSTREAM_URL` | seeder default `http://localhost:3001` | Mock-upstream root driving the demo workflow HTTP node (`<base>/api/users`). |
 | `KINTSUGI_PUBLIC_URL` | `http://localhost:<port>` | Public Kintsugi root used to build the error-trigger `/error-hook` target. |
 
@@ -129,6 +131,15 @@ Every variable is optional: unset (or blank) disables the feature that uses it, 
 - Sandbox safety: HTTP-node hosts are checked against an egress allowlist (warn-only finding on the result); the sandbox workflow copy is deleted after verification unless explicitly kept.
 - Dashboard/API auth: the `GET /` shell and feed endpoints are publicly viewable; approve, reject, and revert require `DASHBOARD_TOKEN` when set.
 - Patches are applied by code and validated: only affected nodes, only resolvable paths, exact-diff check — unrelated-node edits are rejected.
+
+## Search
+
+Opt-in web-search enrichment for hard diagnoses (evidence only — it never changes tiering or gates).
+
+- When the first diagnose verdict comes back weak — unknown (or blank) `failure_class`, or `confidence < 0.6` — and `TINYFISH_API_KEY` is set, the diagnose stage runs one TinyFish search, sanitizes the top-5 hits (title/url/snippet) through the same sanitizer boundary as every other untrusted input, and re-prompts the LLM with the evidence inside the existing `<data>` boundary.
+- Offline by default: with `TINYFISH_API_KEY` unset (or blank) the search port is a no-op fake — zero outbound calls to `agent.tinyfish.ai`, and the first verdict stands as-is.
+- Every search call is audited: one `llm_traces` row with stage exactly `search` (model `tinyfish`) records the capped query, the capped evidence, and the returned hits for the event. The enriched second verdict keeps stage `diagnose`.
+- Search failures degrade to the first verdict; `TINYFISH_API_BASE_URL` overrides the base (`https://agent.tinyfish.ai` by default).
 
 ## Docker
 

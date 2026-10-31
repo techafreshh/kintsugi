@@ -25,6 +25,8 @@ describe("loadSettings", () => {
       dbPath: undefined,
       n8nBaseUrl: undefined,
       n8nApiKey: undefined,
+      tinyfishApiKey: undefined,
+      tinyfishApiBaseUrl: undefined,
       mockUpstreamUrl: undefined,
       publicUrl: undefined,
     });
@@ -49,6 +51,8 @@ describe("loadSettings", () => {
       KINTSUGI_DB_PATH: "data/kintsugi.db",
       N8N_BASE_URL: "https://n8n.example",
       N8N_API_KEY: "n8n-key",
+      TINYFISH_API_KEY: "tinyfish-key",
+      TINYFISH_API_BASE_URL: "https://search.example",
       MOCK_UPSTREAM_URL: "http://chaos.example:3001",
       KINTSUGI_PUBLIC_URL: "https://kintsugi.example",
     };
@@ -70,6 +74,8 @@ describe("loadSettings", () => {
       dbPath: "data/kintsugi.db",
       n8nBaseUrl: "https://n8n.example",
       n8nApiKey: "n8n-key",
+      tinyfishApiKey: "tinyfish-key",
+      tinyfishApiBaseUrl: "https://search.example",
       mockUpstreamUrl: "http://chaos.example:3001",
       publicUrl: "https://kintsugi.example",
     });
@@ -90,6 +96,8 @@ describe("loadSettings", () => {
       KINTSUGI_DB_PATH: " ",
       N8N_BASE_URL: "\n ",
       N8N_API_KEY: " ",
+      TINYFISH_API_KEY: "  ",
+      TINYFISH_API_BASE_URL: " ",
       MOCK_UPSTREAM_URL: "  ",
       KINTSUGI_PUBLIC_URL: "",
     });
@@ -106,6 +114,8 @@ describe("loadSettings", () => {
     expect(settings.dbPath).toBeUndefined();
     expect(settings.n8nBaseUrl).toBeUndefined();
     expect(settings.n8nApiKey).toBeUndefined();
+    expect(settings.tinyfishApiKey).toBeUndefined();
+    expect(settings.tinyfishApiBaseUrl).toBeUndefined();
     expect(settings.mockUpstreamUrl).toBeUndefined();
     expect(settings.publicUrl).toBeUndefined();
   });

@@ -180,6 +180,13 @@ export interface Store {
   insertDecision(input: InsertDecisionInput): StoredDecision;
   listDecisions(eventId: string): StoredDecision[];
 
+  /**
+   * One audit row per LLM/search call. `stage` is free-form text, not a
+   * union: besides the `diagnose`/`patch`/`judge` verdict stages (written by
+   * the traced LLM wrapper) the diagnose search enrichment (issue #76)
+   * records its own `stage: "search"` row here — no DDL change needed,
+   * arbitrary stage strings are valid by design.
+   */
   insertTrace(input: InsertTraceInput): StoredLlmTrace;
   listTraces(eventId: string): StoredLlmTrace[];
 

@@ -28,6 +28,10 @@ export interface Settings {
   n8nBaseUrl: string | undefined;
   /** n8n API key sent as `X-N8N-API-KEY` on every client request; must accompany n8nBaseUrl. */
   n8nApiKey: string | undefined;
+  /** TinyFish search API key (`TINYFISH_API_KEY`); unset keeps diagnose enrichment offline. */
+  tinyfishApiKey: string | undefined;
+  /** Override of the TinyFish search base URL (`TINYFISH_API_BASE_URL`); blank means the adapter default. */
+  tinyfishApiBaseUrl: string | undefined;
   /** Mock-upstream base URL driving the demo workflow HTTP node (`<base>/api/users`); blank falls back to the seeder default. */
   mockUpstreamUrl: string | undefined;
   /** Public Kintsugi root used to build the error-trigger `/error-hook` target; blank falls back to localhost:port. */
@@ -95,6 +99,8 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     dbPath: optionalString(env.KINTSUGI_DB_PATH),
     n8nBaseUrl: optionalString(env.N8N_BASE_URL),
     n8nApiKey: optionalString(env.N8N_API_KEY),
+    tinyfishApiKey: optionalString(env.TINYFISH_API_KEY),
+    tinyfishApiBaseUrl: optionalString(env.TINYFISH_API_BASE_URL),
     mockUpstreamUrl: optionalString(env.MOCK_UPSTREAM_URL),
     publicUrl: optionalString(env.KINTSUGI_PUBLIC_URL),
   };
