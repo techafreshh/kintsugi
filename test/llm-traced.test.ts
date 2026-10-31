@@ -149,7 +149,11 @@ describe("traced failure audit", () => {
 
 describe("traced factory", () => {
   it("createTracedLLM composes the mock with tracing for the event", async () => {
-    const traced = createTracedLLM(mockEnv(), store, "e-factory");
+    const traced = createTracedLLM(
+      { ...mockEnv(), KINTSUGI_MOCK_LLM: "1" } as NodeJS.ProcessEnv,
+      store,
+      "e-factory",
+    );
     expect(traced.mode).toBe("mock");
     await traced.submit_verdict("diagnose", "prompt", diagnoseVerdictSchema);
     expect(store.listTraces("e-factory")).toHaveLength(1);

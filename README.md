@@ -103,8 +103,11 @@ Every variable is optional: unset (or blank) disables the feature that uses it, 
 | `PORT` | `8080` (via `KINTSUGI_PORT`, then `8080`) | Receiver port. Precedence: `PORT`, then `KINTSUGI_PORT`, then `8080`; blank or invalid values fall through instead of crashing startup. |
 | `KINTSUGI_PORT` | `8080` | Second-preference receiver port, same fall-through semantics. |
 | `DASHBOARD_TOKEN` | unset (open locally) | Bearer token guarding dashboard mutations (`Authorization: Bearer <token>`); unset disables auth for local use. |
-| `NEBIUS_API_KEY` | unset (LLM repair off) | Nebius credentials; unset disables all LLM-backed repair flows. |
-| `NEBIUS_BASE_URL` | built-in default | Override of the provider API base URL. |
+| `LLM_PROVIDER` | unset (LLM repair off) | LLM provider selection: `openrouter` or `deepseek`; unset (or blank/unknown) means LLM-off with zero outbound inference calls. |
+| `OPENROUTER_API_KEY` | unset (OpenRouter off) | OpenRouter credentials; unset disables the OpenRouter provider. |
+| `OPENROUTER_BASE_URL` | built-in default | Override of the OpenRouter API base URL. |
+| `DEEPSEEK_API_KEY` | unset (DeepSeek off) | DeepSeek credentials; unset disables the DeepSeek provider. |
+| `DEEPSEEK_BASE_URL` | built-in default | Override of the DeepSeek API base URL. |
 | `MODEL_FAST` | unset | Model id for the fast role; used verbatim. |
 | `MODEL_REASON` | unset | Model id for the reasoning role; used verbatim. |
 | `MODEL_JUDGE` | unset | Model id for the judge role; used verbatim. |
@@ -122,7 +125,7 @@ Every variable is optional: unset (or blank) disables the feature that uses it, 
 
 - Sanitizer boundary before any LLM prompt (`src/security/sanitize.ts`): strips invisible and Bidi-override characters, normalizes homoglyph confusables, flags instruction-shaped lines. A hostile upstream API must not steer the diagnoser.
 - Credential redaction (`src/security/redact.ts`): secret-shaped strings (JWTs, provider keys, `Bearer` values, `password=`/`token=`/`apiKey=` assignments) become `[REDACTED]`; every `credentials` key is dropped from workflow views sent to the LLM, snapshots, or the dashboard. Credentials are never read, exported, or modified.
-- Secrets live in `.env` only (`NEBIUS_API_KEY`, `N8N_API_KEY`, `TELEGRAM_BOT_TOKEN`); never logged, never committed. `.gitignore` and `.dockerignore` both exclude `.env`, databases, and runtime data.
+- Secrets live in `.env` only (`OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `N8N_API_KEY`, `TELEGRAM_BOT_TOKEN`); never logged, never committed. `.gitignore` and `.dockerignore` both exclude `.env`, databases, and runtime data.
 - Sandbox safety: HTTP-node hosts are checked against an egress allowlist (warn-only finding on the result); the sandbox workflow copy is deleted after verification unless explicitly kept.
 - Dashboard/API auth: the `GET /` shell and feed endpoints are publicly viewable; approve, reject, and revert require `DASHBOARD_TOKEN` when set.
 - Patches are applied by code and validated: only affected nodes, only resolvable paths, exact-diff check — unrelated-node edits are rejected.

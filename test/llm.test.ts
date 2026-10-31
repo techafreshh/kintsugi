@@ -47,13 +47,22 @@ describe("mock diagnose verdict", () => {
 });
 
 describe("mock defaults", () => {
-  it('with no scenario hint, the mock defaults to schema-drift and LLM.name === "mock" with mode === "mock"', async () => {
-    const llm = createLLM(envFor(undefined));
+  it('with KINTSUGI_MOCK_LLM=1 and no scenario hint, the mock defaults to schema-drift and LLM.name === "mock" with mode === "mock"', async () => {
+    const llm = createLLM({ KINTSUGI_MOCK_LLM: "1" } as NodeJS.ProcessEnv);
     expect(llm.name).toBe("mock");
     expect(llm.mode).toBe("mock");
     const verdict = await llm.submit_verdict("diagnose", "prompt", diagnoseVerdictSchema);
     expect((verdict as DiagnoseVerdict).rootCauseKind).toBe("schema-drift");
     expect(validate(diagnoseVerdictSchema, verdict).ok).toBe(true);
+  });
+
+  it('with no env, createLLM returns the zero-network off port', async () => {
+    const llm = createLLM({} as NodeJS.ProcessEnv);
+    expect(llm.name).toBe("off");
+    expect(llm.mode).toBe("off");
+    await expect(llm.submit_verdict("diagnose", "prompt", diagnoseVerdictSchema)).rejects.toThrow(
+      /llm off/,
+    );
   });
 
   it("with blank or unknown MOCK_LLM_SCENARIO, resolveScenario falls through to schema-drift without throwing", async () => {

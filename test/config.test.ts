@@ -10,8 +10,11 @@ describe("loadSettings", () => {
     expect(loadSettings({})).toEqual({
       port: 8080,
       dashboardToken: undefined,
-      nebiusApiKey: undefined,
-      nebiusBaseUrl: undefined,
+      llmProvider: undefined,
+      openrouterApiKey: undefined,
+      openrouterBaseUrl: undefined,
+      deepseekApiKey: undefined,
+      deepseekBaseUrl: undefined,
       modelFast: undefined,
       modelReason: undefined,
       modelJudge: undefined,
@@ -31,8 +34,11 @@ describe("loadSettings", () => {
     const env = {
       PORT: "9911",
       DASHBOARD_TOKEN: "dash-tok",
-      NEBIUS_API_KEY: "nebius-key",
-      NEBIUS_BASE_URL: "https://api.nebius.example/v1",
+      LLM_PROVIDER: "openrouter",
+      OPENROUTER_API_KEY: "openrouter-key",
+      OPENROUTER_BASE_URL: "https://openrouter.example/v1",
+      DEEPSEEK_API_KEY: "deepseek-key",
+      DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
       MODEL_FAST: "fast-model",
       MODEL_REASON: "reason-model",
       MODEL_JUDGE: "judge-model",
@@ -49,8 +55,11 @@ describe("loadSettings", () => {
     expect(loadSettings(env)).toEqual({
       port: 9911,
       dashboardToken: "dash-tok",
-      nebiusApiKey: "nebius-key",
-      nebiusBaseUrl: "https://api.nebius.example/v1",
+      llmProvider: "openrouter",
+      openrouterApiKey: "openrouter-key",
+      openrouterBaseUrl: "https://openrouter.example/v1",
+      deepseekApiKey: "deepseek-key",
+      deepseekBaseUrl: "https://deepseek.example/v1",
       modelFast: "fast-model",
       modelReason: "reason-model",
       modelJudge: "judge-model",
@@ -69,7 +78,11 @@ describe("loadSettings", () => {
   it("treats blank and whitespace-only values as unset", () => {
     const settings = loadSettings({
       DASHBOARD_TOKEN: "  ",
-      NEBIUS_API_KEY: "",
+      LLM_PROVIDER: "  ",
+      OPENROUTER_API_KEY: "",
+      OPENROUTER_BASE_URL: " ",
+      DEEPSEEK_API_KEY: "",
+      DEEPSEEK_BASE_URL: "  ",
       MODEL_FAST: "\t ",
       TELEGRAM_BOT_TOKEN: " ",
       TELEGRAM_CHAT_ID: "",
@@ -81,7 +94,11 @@ describe("loadSettings", () => {
       KINTSUGI_PUBLIC_URL: "",
     });
     expect(settings.dashboardToken).toBeUndefined();
-    expect(settings.nebiusApiKey).toBeUndefined();
+    expect(settings.llmProvider).toBeUndefined();
+    expect(settings.openrouterApiKey).toBeUndefined();
+    expect(settings.openrouterBaseUrl).toBeUndefined();
+    expect(settings.deepseekApiKey).toBeUndefined();
+    expect(settings.deepseekBaseUrl).toBeUndefined();
     expect(settings.modelFast).toBeUndefined();
     expect(settings.telegramBotToken).toBeUndefined();
     expect(settings.telegramChatId).toBeUndefined();

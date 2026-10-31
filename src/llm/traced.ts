@@ -1,6 +1,6 @@
 /**
  * Pinned contract (issue #18): `TracedLLM` decorator over the selected
- * `LLMPort` (mock or Nebius). Every `submit_verdict` call persists one
+ * `LLMPort` (mock, OpenRouter, DeepSeek, or off). Every `submit_verdict` call persists one
  * `insertTrace` row (success and failure) so every LLM decision is auditable,
  * and the pipeline stages keep taking plain `LLMPort` so decoration is
  * transparent. `eventId` is bound at decoration time, keeping the port
@@ -30,7 +30,7 @@ export interface TracedOptions {
 
 /** Stringify a prompt, response, or verdict for storage: strings stay as-is,
  * other values go through safe `JSON.stringify` with a `String()` fallback
- * (mirroring `promptAsText` in `src/llm/nebius.ts`); never throws. */
+ * (mirroring `promptAsText` in `src/llm/openrouter.ts`); never throws. */
 function traceText(value: unknown): string {
   if (typeof value === "string") return value;
   if (value === undefined) return "";
@@ -65,7 +65,7 @@ function errorText(cause: unknown): string {
 }
 
 /** Model label for the trace row: the inner stage routing when available
- * (Nebius `resolveModel`) else the port name (mock); never throws and never
+ * (provider `resolveModel`) else the port name (mock); never throws and never
  * returns blank. */
 function resolveModelName(inner: LLMPort, stage: LlmStage): string {
   const candidate = (inner as unknown as { resolveModel?: unknown }).resolveModel;
@@ -191,7 +191,7 @@ export function withTraces(
 
 /**
  * Orchestrator switch-point: build the inner port via the existing
- * `createLLM(env)` (mock without `NEBIUS_API_KEY`, live Nebius otherwise)
+ * `createLLM(env)` (mock via `KINTSUGI_MOCK_LLM=1`, live provider via `LLM_PROVIDER`, off otherwise)
  * and wrap it with tracing for one event.
  */
 export function createTracedLLM(env: NodeJS.ProcessEnv, store: Store, eventId: string): TracedLLM;

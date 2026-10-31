@@ -1,6 +1,6 @@
 /**
  * Worker entrypoint wiring (issue #22): loads `Settings` once, opens the
- * file-backed store, picks the LLM solely via `NEBIUS_API_KEY` presence, and
+ * file-backed store, picks the LLM via `createLLM` (`KINTSUGI_MOCK_LLM`/`LLM_PROVIDER`), and
  * starts the repair-loop poller from `src/orchestrator/worker.ts`.
  * `kintsugi worker` runs `main()` below; the module stays import-safe under
  * vitest (nothing polls on import).
@@ -25,7 +25,7 @@ export interface WorkerEntry {
 export function startWorkerEntry(): WorkerEntry {
   const settings = loadSettings();
   const store = openStore(settings.dbPath ?? "kintsugi.db");
-  // Mock vs Nebius is decided solely by NEBIUS_API_KEY presence (see port.ts).
+  // Mock/off/provider is decided by createLLM (see port.ts).
   const llm = createLLM(process.env);
   const orchestrator = createOrchestrator({ store, llm, settings });
   const handle = startWorker(orchestrator, store);
