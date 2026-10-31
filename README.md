@@ -4,7 +4,7 @@
 
 Kintsugi watches failed n8n executions, diagnoses the root cause with an LLM, patches the workflow JSON, **verifies the patch by replaying the original failed payload in a sandbox**, then auto-promotes low-risk fixes or parks riskier ones for human approval. One-click revert is always available.
 
-Built for the **Nebius x NVIDIA Global AI Hackathon**.
+Built for a global AI hackathon.
 
 Verified runtime: Node 22, `npm ci && npm run build && node dist/src/receiver/app.js`, readiness probe `GET /healthz`.
 
