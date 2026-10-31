@@ -11,6 +11,7 @@ import { Value } from "@sinclair/typebox/value";
 import { loadSettings, type Settings } from "../config/settings.js";
 import { sendApprovalCard } from "../notify/telegram.js";
 import { withTraces, type LLMPort } from "../llm/port.js";
+import { createSearchPort } from "../search/port.js";
 import { buildWorkflowView } from "../llm/workflowView.js";
 import { diagnose } from "../pipeline/diagnose.js";
 import { runPatchStage } from "../pipeline/patch.js";
@@ -547,7 +548,7 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
     // Diagnose: a throw parks the event as failed with no promotion.
     let diagnosis: unknown;
     try {
-      diagnosis = await diagnose(traced, view);
+      diagnosis = await diagnose(traced, view, { search: createSearchPort(), store, eventId });
       recordDecision(
         eventId,
         "diagnose",
