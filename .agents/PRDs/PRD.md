@@ -3,7 +3,7 @@
 **Self-repairing agent for n8n** — *every break becomes a golden seam.*
 
 **Status:** Approved · **Date:** 2026-10-26 · **Deadline:** 2026-10-30, 6:00pm WAT (10:00am PDT)
-**Context:** Nebius x NVIDIA Global AI Hackathon (Devpost). Fresh repo at `/home/techafresh/projects/kintsugi`.
+**Context:** Global AI Hackathon (Devpost). Fresh repo at `/home/techafresh/projects/kintsugi`.
 **Stack decision (v2):** TypeScript on the **Pi SDK** (`@earendil-works/pi-ai`), replacing the earlier Python plan (scaffold deleted by choice; design carried over).
 
 ---
@@ -58,7 +58,7 @@ Key needs: failures surface automatically with a diagnosis; low-risk fixes happe
 
 **Technical**
 - [x] SQLite store (node:sqlite): snapshots, repair events, decisions, agent traces, metrics
-- [x] LLM layer on pi-ai: Nebius custom provider (all inference), mock port, TypeBox-validated verdicts
+- [x] LLM layer on pi-ai: live provider (all inference), mock port, TypeBox-validated verdicts
 - [x] Sanitizer boundary + secret redaction in snapshots/LLM payloads/dashboard display
 - [x] Sandbox egress allowlist check; sandbox webhook secret
 - [x] docker-compose (demo deliverable): dev profile (all-in-one with n8n) and deploy profile (joins the existing `web_gateway` network) — validated by the operator at demo time, not on factory machines
@@ -72,7 +72,7 @@ Key needs: failures surface automatically with a diagnosis; low-risk fixes happe
 - [ ] Credential management (never read/exported/modified)
 - [ ] Workflow creation from scratch; anything beyond one dashboard page
 - [ ] Editing n8n's global settings; touching workflows that don't arrive via the error hook
-- [ ] `classify()`-style classifier APIs (OpenAI Decisions, TypeSafe Jev) — documented post-hackathon upgrade path, not shipped (all inference must be Nebius)
+- [ ] `classify()`-style classifier APIs (OpenAI Decisions, TypeSafe Jev) — documented post-hackathon upgrade path, not shipped (all inference stays on the live provider)
 
 ## 5. User Stories
 
@@ -102,7 +102,7 @@ Key needs: failures surface automatically with a diagnosis; low-risk fixes happe
 
 - One TS package, three entrypoints (`api`, `worker`, `mock-upstream` bin) sharing store/clients; two containers from one image.
 - **Pipeline orchestrator:** stages persist state so every step is auditable on the dashboard.
-- **LLM boundary:** all inference behind one `LLMPort` interface — Nebius implementation (pi-ai custom provider) + mock implementation; verdicts TypeBox-validated via a `submit_verdict` tool call (text-JSON fallback).
+- **LLM boundary:** all inference behind one `LLMPort` interface — live provider implementation (pi-ai custom provider) + mock implementation; verdicts TypeBox-validated via a `submit_verdict` tool call (text-JSON fallback).
 - **n8n-JSON boundary:** `workflow-view.ts` (compact LLM view incl. failing-node inputs + last-known-good diff) in; `patch-ops.ts` (path-level ops, validated application) out.
 - **Dual-profile compose:** dev (all-in-one) / deploy (external `web_gateway` network on the VPS).
 
@@ -128,7 +128,7 @@ kintsugi/
 │   ├── diagnose.ts  patch.ts  repair.ts  notifier.ts  prompts.ts
 │   ├── llm/
 │   │   ├── port.ts         # LLMPort interface + TypeBox verdict schemas
-│   │   ├── nebius.ts       # pi-ai createProvider() — Nebius Token Factory
+│   │   ├── openrouter.ts     # pi-ai createProvider() — live provider
 │   │   └── mock.ts         # deterministic scenario-aware rules
 │   ├── sandbox/{harness.ts, verify.ts}
 │   ├── receiver/{app.ts, static/index.html}
@@ -162,7 +162,7 @@ The LLM never reads or writes raw n8n JSON. **`workflow-view.ts`**: compact view
 `MODEL_JUDGE` (Nano-class, defaults to `MODEL_FAST`) returns `{verdict, reason, confidence}` at four points: **triage** (proceed/flag_only/needs_more_info), **patch review** (proceed/reject), **promotion** (promote/escalate), **iteration** (retry/escalate). Escalate-only — the deterministic tier classifier stays the final authority. ~4 small calls per repair.
 
 ### 7.6 Agent traces
-Every LLM call records: stage, model, llm_mode (nebius/mock), duration, tokens in/out, prompt text (capped 32KB), response text (capped 32KB), parsed verdict, error. Rendered on the dashboard detail as a chronological expandable timeline. This is the audit trail that makes the automation trustworthy.
+Every LLM call records: stage, model, llm_mode (live/mock), duration, tokens in/out, prompt text (capped 32KB), response text (capped 32KB), parsed verdict, error. Rendered on the dashboard detail as a chronological expandable timeline. This is the audit trail that makes the automation trustworthy.
 
 ### 7.7 Dashboard
 One dark-themed page, htmx (vendored locally): metrics chips; feed with status pills (received/diagnosing/verifying/awaiting_approval/promoted/failed/flagged/rejected/reverted); detail pane = diagnosis, tier + reasons, side-by-side diff, verification log, agent traces, approve/reject/revert buttons. Token from localStorage sent as `X-Kintsugi-Token`. Feed auto-refresh.
@@ -186,7 +186,7 @@ Telegram cards for Tier-2 events (diff summary + Approve/Reject inline buttons);
 | Layer | Choice | Notes |
 |---|---|---|
 | Runtime | TypeScript (strict) on node 22 | verified factory runtime: node 22.23.3 (instabox, snapshot `factory-base`); never require node ≥ 23 (engines, images, docs) |
-| LLM | **`@earendil-works/pi-ai`** — pinned version; only LLM dep | custom Nebius provider via `createProvider()` + `envApiKeyAuth` + `openai-completions`; TypeBox schemas; token/cost tracking |
+| LLM | **`@earendil-works/pi-ai`** — pinned version; only LLM dep | custom live provider via `createProvider()` + `envApiKeyAuth` + `openai-completions`; TypeBox schemas; token/cost tracking |
 | HTTP | hono + @hono/node-server | receiver + mock upstream |
 | DB | `node:sqlite` | fallback `better-sqlite3` if needed |
 | Frontend | single htmx page, no build step | vendored htmx.min.js |
@@ -200,12 +200,12 @@ Telegram cards for Tier-2 events (diff summary + Approve/Reject inline buttons);
 **Non-negotiable rules**
 1. **Sanitizer boundary** before any LLM prompt: strip invisible characters (zero-width, Bidi overrides, Unicode-tag U+E0000–E007F), normalize homoglyph confusables, flag instruction-shaped lines. A hostile upstream API must not steer the diagnoser.
 2. **Credentials never read/exported/modified** (FLAG-ONLY exists for auth issues); n8n credential references dropped from LLM/display views; secret-shaped strings redacted in snapshots/LLM payloads/dashboard.
-3. **Secrets in `.env` only** — `NEBIUS_API_KEY`, `N8N_API_KEY`, `TELEGRAM_BOT_TOKEN`; never logged, never committed.
+3. **Secrets in `.env` only** — `OPENROUTER_API_KEY`, `N8N_API_KEY`, `TELEGRAM_BOT_TOKEN`; never logged, never committed.
 4. **Sandbox egress** allowlist check; sandbox never activated (except webhook-fallback, secret-header protected, deactivated immediately); sandbox deleted after verification.
 5. **Dashboard**: feed publicly viewable; approve/reject/revert behind optional `DASHBOARD_TOKEN`.
 6. **Patches applied by code, validated**: only affected nodes, only resolvable paths, exact-diff check.
 
-**Env vars:** `NEBIUS_BASE_URL`, `NEBIUS_API_KEY`, `MODEL_FAST`, `MODEL_REASON`, `MODEL_JUDGE`, `N8N_HOST`, `N8N_API_KEY`, `KINTSUGI_DB_PATH`, `KINTSUGI_MOCK_LLM`, `KINTSUGI_SANDBOX_WEBHOOK_SECRET`, `DASHBOARD_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `KINTSUGI_PORT`, `KINTSUGI_KEEP_SANDBOX`, `SANDBOX_EGRESS_ALLOWLIST`, `UPSTREAM_URL`, `N8N_VERSION` (compose).
+**Env vars:** `LLM_PROVIDER`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `MODEL_FAST`, `MODEL_REASON`, `MODEL_JUDGE`, `N8N_HOST`, `N8N_API_KEY`, `KINTSUGI_DB_PATH`, `KINTSUGI_MOCK_LLM`, `KINTSUGI_SANDBOX_WEBHOOK_SECRET`, `DASHBOARD_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `KINTSUGI_PORT`, `KINTSUGI_KEEP_SANDBOX`, `SANDBOX_EGRESS_ALLOWLIST`, `UPSTREAM_URL`, `N8N_VERSION` (compose).
 
 ## 10. API Specification
 
@@ -236,14 +236,14 @@ Telegram cards for Tier-2 events (diff summary + Approve/Reject inline buttons);
 - [ ] Sanitizer blocks invisible-character injection and flags instruction-shaped lines (unit tested)
 - [ ] Agent traces visible per event on the dashboard
 - [ ] CLI `fix`/`seed-demo` work; full E2E runs with `KINTSUGI_MOCK_LLM=1`
-- [ ] Deliverables: public repo (MIT at root, no secrets), README (≤10 steps, architecture diagram, tier table, security section), working demo URL, ≤3-min YouTube video, written Nebius/NVIDIA feedback section
+- [ ] Deliverables: public repo (MIT at root, no secrets), README (≤10 steps, architecture diagram, tier table, security section), working demo URL, ≤3-min YouTube video, written hackathon feedback section
 
 ## 12. Implementation Phases
 
 **Phase 1 — Foundation (Oct 26 evening):** PRD re-emit; git init + scaffold commit; package/tsconfig/vitest setup; config, sanitizer, redact, diff, store, workflow-view, patch-ops + unit tests.
 *Validation:* vitest green; sanitizer blocks injection fixtures.
 
-**Phase 2 — Repair loop (Oct 27):** LLM port + Nebius provider + mock; prompts; diagnose, patch, tiers, gates, sandbox harness/verify, repair orchestrator; CLI fix/worker/api/seed-demo.
+**Phase 2 — Repair loop (Oct 27):** LLM port + live provider + mock; prompts; diagnose, patch, tiers, gates, sandbox harness/verify, repair orchestrator; CLI fix/worker/api/seed-demo.
 *Validation:* E2E with mock LLM: seeded failing execution → patched workflow → sandbox green → tier action.
 
 **Phase 3 — Surfaces (Oct 28):** receiver API + dashboard with agent traces; Telegram notifier; mock upstream; seed workflows; Dockerfile + compose profiles.
@@ -265,7 +265,7 @@ Component tables, API lists and feature prose elsewhere in this PRD are DESCRIPT
 7. n8n client: workflow get/create/update/delete, executions list/get-with-data, run-endpoint capability probe, activate/deactivate.
 8. patch-ops: path-level operation application with strict validation (set_parameter only on existing paths; retry/onError whitelists; add/remove with connection rewiring in code; node renames disallowed; loud rejection on any violation).
 9. LLMPort interface + TypeBox verdict schemas + deterministic mock implementation (scenario-aware: schema drift, 429/502, human-broke-it).
-10. Nebius provider on pi-ai behind LLMPort: env-driven MODEL_FAST/MODEL_REASON/MODEL_JUDGE, `submit_verdict` tool-call pattern with text-JSON fallback.
+10. Live provider on pi-ai behind LLMPort: env-driven MODEL_FAST/MODEL_REASON/MODEL_JUDGE, `submit_verdict` tool-call pattern with text-JSON fallback.
 11. Hardened prompt builders (`<data>` boundaries) + diagnose stage.
 12. Patch stage: plan validation (affected-nodes scope, op schema) + application via patch-ops.
 13. Deterministic tier classifier (flag-only/approve/auto-promote; escalation on doubt).
@@ -287,7 +287,7 @@ Component tables, API lists and feature prose elsewhere in this PRD are DESCRIPT
 
 ## 13. Future Considerations
 
-- **`models.classify()` upgrade:** swap decision gates to a true classifier API (OpenAI Decisions / TypeSafe Jev / future Nebius equivalent) behind the existing gate contract — the emerging "decision model" category; small adapter, same schemas.
+- **`models.classify()` upgrade:** swap decision gates to a true classifier API (OpenAI Decisions / TypeSafe Jev / future live equivalent) behind the existing gate contract — the emerging "decision model" category; small adapter, same schemas.
 - Learning from history: recurring manual approvals → auto-promote candidates per failure class; per-workflow repair health.
 - Sandbox runs persisted over time as a per-workflow regression suite.
 - Cross-workflow drift correlation (same upstream failing multiple workflows → one upstream fix).
@@ -298,10 +298,10 @@ Component tables, API lists and feature prose elsewhere in this PRD are DESCRIPT
 | Risk | Impact | Mitigation |
 |---|---|---|
 | pi-ai moves fast (0.x) | API drift breaks build | Pin exact version + committed lockfile; wrap behind `LLMPort` so surface area is small |
-| Nebius tool-calling/format quirks | Verdicts unparseable | TypeBox-validated `submit_verdict` tool + text-JSON fallback with re-ask; mock mode unblocks everything else |
+| Live provider tool-calling/format quirks | Verdicts unparseable | TypeBox-validated `submit_verdict` tool + text-JSON fallback with re-ask; mock mode unblocks everything else |
 | `node:sqlite` experimental behavior | Store instability | Fallback to `better-sqlite3` isolated behind `store.ts` |
 | n8n lacks `POST /workflows/{id}/run` | Primary sandbox path fails | Capability probe; webhook-trigger fallback already designed (not a patch) |
-| Nebius credits arrive late | No real inference for E2E | Mock LLM mode: full E2E green before credits; swap env when they land |
+| Live credentials arrive late | No real inference for E2E | Mock LLM mode: full E2E green before credits; swap env when they land |
 | Deadline compression | Incomplete submission | Fixed scope; Telegram first cut; scenarios pinned to mock upstream; phases sequenced so surfaces come after the loop works |
 | LLM patch quality | Broken/unsafe patches | LLM never authors n8n JSON; path-ops validated by code; ≤3 sandbox iterations; deterministic tiers |
 | Public dashboard without auth | Strangers mutate state | `DASHBOARD_TOKEN` on mutations; feed read-only |
@@ -314,20 +314,20 @@ Component tables, API lists and feature prose elsewhere in this PRD are DESCRIPT
 ### Operator checklist (operator-only steps — never sliced into issues)
 - Create the public GitHub repo and push the initial PRD/LICENSE seed (happens at factory onboarding)
 - Deploy the stack to the VPS (`web_gateway` network) and publish the demo URL via the reverse proxy
-- Nebius console: put `NEBIUS_BASE_URL` / `NEBIUS_API_KEY` + the two model slugs into `.env` on the VPS
+- Provider console: put `OPENROUTER_API_KEY` / `DEEPSEEK_API_KEY` + the two model slugs into `.env` on the VPS
 - Optional: Telegram bot token + chat id
 - Record the ≤3-minute demo video; submit on Devpost; review the feedback section
 - **Stack pivot (2026-10-26):** Python scaffold deleted by user choice; rebuilt in TypeScript on the Pi SDK. Design (pipeline, tiers, sandbox, translation layer, gates) carried over unchanged.
 - **pi SDK = libraries** (`@earendil-works/pi-ai`; not the coding-agent embed, not agent-core loop): user-confirmed "deterministic pipeline" + "I meant the libraries."
 - **Dashboard:** single htmx page **with agent traces** (user: "keep the single page with agent traces").
 - **One language everywhere** (user-confirmed), including mock upstream.
-- **All inference through Nebius Token Factory** (user-confirmed), including decision gates (`MODEL_JUDGE`, Nano-class, defaults to `MODEL_FAST`).
+- **All inference through the live provider** (user-confirmed), including decision gates (`MODEL_JUDGE`, Nano-class, defaults to `MODEL_FAST`).
 - **n8n target:** existing VPS instance (n8n.techa.pro, compose stack on `web_gateway` network). Compose dev profile = all-in-one; deploy profile joins the existing network; demo URL via the VPS reverse proxy (gateway type confirmed at deploy).
 - **Telegram:** built, flag-gated, shipped disabled until token provided; first cut if schedule squeezes.
-- **Nebius access:** built now against env placeholders; user gaining credits; mock mode unblocks E2E meanwhile.
+- **Live access:** built now against env placeholders; user gaining credits; mock mode unblocks E2E meanwhile.
 - **Sanitizer:** no porting sources found (`sanitize.py` / `posting_guard.py` absent) — implemented fresh per spec.
 - **Redaction:** secret-shaped strings redacted in snapshots/LLM payloads/display (user's YT API key observed in a Code node on their instance — rotate it).
 - **Instance safety:** Kintsugi touches only error-hook arrivals; creates exactly two workflows on the production instance (demo chaos + error trigger).
-- **Decision-model research:** OpenRouter "decisions" modality / "Perplexity Decider" checked against the live API 2026-10-26 — does not exist there; the real category is classifier APIs (OpenAI Decisions `POST /v1/decisions` GPT-6 Luna, TypeSafe Jev, Cloudflare Clef), which pi-ai supports natively via `models.classify()`. Hackathon constraint keeps gates on Nebius; `classify()` is the documented upgrade path.
+- **Decision-model research:** OpenRouter "decisions" modality / "Perplexity Decider" checked against the live API 2026-10-26 — does not exist there; the real category is classifier APIs (OpenAI Decisions `POST /v1/decisions` GPT-6 Luna, TypeSafe Jev, Cloudflare Clef), which pi-ai supports natively via `models.classify()`. Hackathon constraint keeps gates on the live provider; `classify()` is the documented upgrade path.
 - **Division of labor:** agent owns code, README, compose, feedback-section draft; user owns YouTube video + Devpost form.
 - **Repo:** `kintsugi`, public, MIT; GitHub remote added at publish time.
