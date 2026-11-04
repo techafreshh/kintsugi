@@ -6,6 +6,12 @@ Kintsugi watches failed n8n executions, diagnoses the root cause with an LLM, pa
 
 Built for a global AI hackathon.
 
+[Why](#why) • [Quickstart](#quickstart) • [API](#api) • [Dashboard](#dashboard) • [Configuration](#configuration) • [Troubleshooting](#troubleshooting) • [Limitations](#limitations)
+
+## Why
+
+n8n workflows fail at 3am for boring, repeatable reasons — a renamed API field, a transient 429, a hand edit that broke a Code node. Kintsugi exists to close that loop automatically: every failed execution is captured, diagnosed, patched, and sandbox-verified before a human ever looks at it, with low-risk fixes promoted on their own and anything destructive parked for approval. The golden seam is the point — the repair should be visible, reviewable, and reversible.
+
 Verified runtime: Node 22, `npm ci && npm run build && node dist/src/receiver/app.js`, readiness probe `GET /healthz`.
 
 ## Quickstart
@@ -31,12 +37,13 @@ n8n Error Trigger
        ▼
 src/receiver/app.ts ──► src/store/store.ts ──► repair event persisted
        │                        ▲
-       │ JSON API feed          │ worker repair loop
-       │ + approve/reject/      │ src/orchestrator/
-       │   revert (token-gated) │   orchestrator.ts + worker.ts
+       │ live htmx dashboard    │ worker repair loop
+       │ + JSON API feed        │ src/orchestrator/
+       │ + approve/reject/      │   orchestrator.ts + worker.ts
+       │   revert (token-gated) ▼
        ▼                        │
-   placeholder shell      detect → diagnose → patch → sandbox verify
-   (public/)              (view)  (LLM)      (code)  (src/sandbox/)
+   live dashboard page    detect → diagnose → patch → sandbox verify
+   + fragments            (view)  (LLM)      (code)  (src/sandbox/)
                                                      │
                               ┌──────────────────────┘
                               ▼
@@ -65,13 +72,18 @@ How it works: every failed execution lands in the store via `POST /error-hook`. 
 | `POST` | `/repair-events/:id/reject` | Reject the parked fix; token-gated |
 | `POST` | `/repair-events/:id/revert` | Restore the baseline snapshot; token-gated |
 | `POST` | `/telegram/webhook` | Telegram approval callbacks; `200 {"ok":true}` on valid updates (400 on malformed JSON; orchestrator failures still answer 200 so Telegram does not retry) |
-| `GET` | `/` | Placeholder dashboard shell (`public/index.html`; `npm run build` copies `public/` to `dist/`); `404` JSON when no built page is present |
+| `GET` | `/` | Live server-rendered htmx dashboard (`renderIndex`): metrics chips, event feed, detail pane; static assets in `public/` still serve alongside it |
+| `GET` | `/dashboard/feed` | Feed fragment: one status-pill per event, htmx-swapped into the dashboard (`renderFeed`; `no events yet` when empty) |
+| `GET` | `/dashboard/events/:id` | Detail fragment: diagnosis, side-by-side workflow diff, verification log, agent-trace timeline, Approve/Reject/Revert buttons (`renderDetail`; unknown id → `404`) |
 
 Contract notes: unknown routes return JSON `404` (never 5xx); malformed JSON bodies return `400` (never 500, never hang). Detail responses alias the wire status `awaiting-approval` to `awaiting_approval` and the classifier tier `auto-promote` to `auto`. The detail `verification` block is `{ok, strategy, rowCount, provenance, reason}` — `ok` is true exactly when a `verified` verdict exists for the event.
 
 ## Dashboard
 
-`GET /` serves the placeholder shell from `public/index.html` ("Repair events API is running. See `/repair-events`") — there is no feed/detail UI yet. The event feed, per-event detail (diagnosis, workflow diff, sandbox verification log, per-event agent traces from `llm_traces`), and the approve/reject/revert mutations all live on the JSON API: `GET /repair-events`, `GET /repair-events/:id`, and the token-gated `POST /repair-events/:id/approve|reject|revert` endpoints. The feed endpoints are publicly viewable; the mutation endpoints require `Authorization: Bearer <token>` matching `DASHBOARD_TOKEN` when it is set (unset means open for local use).
+`GET /` serves the live server-rendered htmx dashboard (`renderIndex` in `src/receiver/dashboard.ts`, wired in `createApp`): metrics chips (totals by status and tier), an event feed of status pills, and a detail pane. The feed auto-loads from `GET /dashboard/feed`, and clicking a pill swaps in `GET /dashboard/events/:id` — diagnosis text, side-by-side before/after workflow diff, sandbox verification log, per-event agent-trace timeline (from `llm_traces`), and Approve/Reject/Revert buttons that POST to the token-gated action endpoints.
+
+> [!NOTE]
+> The feed and dashboard fragment routes are publicly viewable. Only the approve/reject/revert mutations require `Authorization: Bearer <token>` matching `DASHBOARD_TOKEN` when it is set (unset means open for local use).
 
 ## Tiers
 
@@ -111,6 +123,7 @@ Every variable is optional: unset (or blank) disables the feature that uses it, 
 | `MODEL_FAST` | unset | Model id for the fast role; used verbatim. |
 | `MODEL_REASON` | unset | Model id for the reasoning role; used verbatim. |
 | `MODEL_JUDGE` | unset | Model id for the judge role; used verbatim. |
+| `KINTSUGI_MOCK_LLM` | unset (mock off) | Test/scratch only: the exact value `1` (trimmed) selects the deterministic mock LLM via `createLLM`, even when a live provider is configured. Never a deployment workflow. |
 | `TELEGRAM_BOT_TOKEN` | unset (notifier off) | Telegram bot credentials; either one unset keeps the notifier off. |
 | `TELEGRAM_CHAT_ID` | unset (notifier off) | Telegram chat target; either one unset keeps the notifier off. |
 | `TELEGRAM_NOTIFIER_ENABLED` | off | Opt-in Tier-2 approval cards. Only the exact value `true` (trimmed, case-insensitive) enables sends; anything else keeps the notifier off with zero outbound calls. |
@@ -129,7 +142,7 @@ Every variable is optional: unset (or blank) disables the feature that uses it, 
 - Credential redaction (`src/security/redact.ts`): secret-shaped strings (JWTs, provider keys, `Bearer` values, `password=`/`token=`/`apiKey=` assignments) become `[REDACTED]`; every `credentials` key is dropped from workflow views sent to the LLM, snapshots, or the dashboard. Credentials are never read, exported, or modified.
 - Secrets live in `.env` only (`OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `N8N_API_KEY`, `TELEGRAM_BOT_TOKEN`); never logged, never committed. `.gitignore` and `.dockerignore` both exclude `.env`, databases, and runtime data.
 - Sandbox safety: HTTP-node hosts are checked against an egress allowlist (warn-only finding on the result); the sandbox workflow copy is deleted after verification unless explicitly kept.
-- Dashboard/API auth: the `GET /` shell and feed endpoints are publicly viewable; approve, reject, and revert require `DASHBOARD_TOKEN` when set.
+- Dashboard/API auth: the live `GET /` page and the feed/detail fragment endpoints are publicly viewable; approve, reject, and revert require `DASHBOARD_TOKEN` when set.
 - Patches are applied by code and validated: only affected nodes, only resolvable paths, exact-diff check — unrelated-node edits are rejected.
 
 ## Search
@@ -157,6 +170,9 @@ Compose profiles (`docker-compose.yml`):
 
 All kintsugi services read the same optional `.env` file (a missing file is fine — every variable falls back to its default). Ports publish on loopback only (`127.0.0.1:${PORT:-8080}:8080`, `127.0.0.1:${MOCK_UPSTREAM_PORT:-3001}:3001`); `api` and `mock-upstream` carry container healthchecks against their `/healthz` endpoints.
 
+> [!NOTE]
+> `MOCK_UPSTREAM_PORT`, `N8N_PORT`, and `N8N_VERSION` appear only in `docker-compose.yml` as host-side overrides for published ports and the n8n image tag — the app itself never reads them (only `loadSettings` vars from the Configuration table reach the code).
+
 ## CLI
 
 One binary, four subcommands (`src/cli.ts`, `bin/kintsugi`):
@@ -174,6 +190,14 @@ One binary, four subcommands (`src/cli.ts`, `bin/kintsugi`):
 - Telegram silent? It is off by default: it needs `TELEGRAM_BOT_TOKEN` **and** `TELEGRAM_CHAT_ID` **and** `TELEGRAM_NOTIFIER_ENABLED=true` (exact value, case-insensitive). Anything else means zero outbound calls — check the spelling of `true`.
 - n8n calls failing? Both `N8N_BASE_URL` and `N8N_API_KEY` must be set; either one blank keeps every n8n-backed flow (seeder, `fix`, worker promotion) off. The client appends `/api/v1`, so the base URL must be the instance root.
 - Mutations return `401`? Set `Authorization: Bearer <token>` matching `DASHBOARD_TOKEN`; when the token var is unset, auth is open for local use.
+
+## Limitations
+
+- Local-first store: the state of record is a single SQLite file (`KINTSUGI_DB_PATH`). No multi-replica or Postgres backend exists; concurrent writers share one file.
+- LLM off by default: with no provider key set, the repair pipeline diagnoses and gates without inference — events are stored and classified, but no patch is proposed. Set `LLM_PROVIDER` plus its key (or `KINTSUGI_MOCK_LLM=1` for scratch) to get patches.
+- Sandbox replays the captured failure payload against a workflow copy; external side effects of the original run are not undone, and HTTP egress is allowlist-checked (warn-only), not blocked.
+- The dashboard has no user accounts or roles — one shared `DASHBOARD_TOKEN`, open when unset. Do not expose it to the public internet without a reverse proxy in front.
+- `seed-demo` targets a real n8n instance; there is no in-repo UI test harness beyond the mock upstream and the e2e scenario suite.
 
 ## License
 
