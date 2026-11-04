@@ -22,6 +22,8 @@ export interface Settings {
   telegramEnabled: boolean;
   /** Override of the Telegram Bot API base URL; blank means the built-in default. */
   telegramApiBaseUrl: string | undefined;
+  /** Mock LLM selection (`KINTSUGI_MOCK_LLM`); only the exact trimmed value `"1"` enables the deterministic mock, beating any provider. Default off. */
+  mockLlm: boolean;
   /** SQLite database file path; unset means the consumer wiring applies its default (kintsugi.db). */
   dbPath: string | undefined;
   /** n8n instance root (base URL the n8n client appends `/api/v1` to); unset disables n8n-backed flows. */
@@ -77,6 +79,16 @@ function isTelegramEnabledFlag(value: string | undefined): boolean {
 }
 
 /**
+ * Mock-LLM opt-in: only the exact trimmed value `"1"` enables the
+ * deterministic mock; `"true"`/`"yes"`/`"on"`/blank/unset all mean off.
+ * Never throws.
+ */
+function isMockLlmEnabled(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  return value.trim() === "1";
+}
+
+/**
  * Parsed once at startup by each module's wiring point — not a module-level
  * singleton, so env changes between tests never leak across imports.
  */
@@ -96,6 +108,7 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     telegramChatId: optionalString(env.TELEGRAM_CHAT_ID),
     telegramEnabled: isTelegramEnabledFlag(env.TELEGRAM_NOTIFIER_ENABLED),
     telegramApiBaseUrl: optionalString(env.TELEGRAM_API_BASE_URL),
+    mockLlm: isMockLlmEnabled(env.KINTSUGI_MOCK_LLM),
     dbPath: optionalString(env.KINTSUGI_DB_PATH),
     n8nBaseUrl: optionalString(env.N8N_BASE_URL),
     n8nApiKey: optionalString(env.N8N_API_KEY),

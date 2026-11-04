@@ -5,6 +5,7 @@ import { Type } from "@sinclair/typebox";
 import { OpenRouterLLM } from "../src/llm/openrouter.js";
 import { DeepSeekLLM } from "../src/llm/deepseek.js";
 import { createLLM } from "../src/llm/port.js";
+import { loadSettings } from "../src/config/settings.js";
 import { diagnoseVerdictSchema, validate } from "../src/llm/schemas.js";
 
 interface RecordedRequest {
@@ -282,6 +283,17 @@ describe("provider retry", () => {
 });
 
 describe("createLLM switch", () => {
+  it("mock selection agrees with loadSettings: on implies mock, off implies off", () => {
+    const onEnv = { KINTSUGI_MOCK_LLM: "1" } as NodeJS.ProcessEnv;
+    expect(loadSettings(onEnv).mockLlm).toBe(true);
+    const mockLlm = createLLM(onEnv);
+    expect(mockLlm.mode).toBe("mock");
+    expect(mockLlm.name).toBe("mock");
+    const offEnv = {} as NodeJS.ProcessEnv;
+    expect(loadSettings(offEnv).mockLlm).toBe(false);
+    expect(createLLM(offEnv).mode).toBe("off");
+  });
+
   it("returns mock for KINTSUGI_MOCK_LLM=1 even when a provider is configured", () => {
     const llm = createLLM({
       KINTSUGI_MOCK_LLM: "1",
