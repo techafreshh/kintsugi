@@ -22,6 +22,7 @@ describe("loadSettings", () => {
       telegramChatId: undefined,
       telegramEnabled: false,
       telegramApiBaseUrl: undefined,
+      mockLlm: false,
       dbPath: undefined,
       n8nBaseUrl: undefined,
       n8nApiKey: undefined,
@@ -48,6 +49,7 @@ describe("loadSettings", () => {
       TELEGRAM_CHAT_ID: "42",
       TELEGRAM_NOTIFIER_ENABLED: "true",
       TELEGRAM_API_BASE_URL: "https://tg.example", 
+      KINTSUGI_MOCK_LLM: "1",
       KINTSUGI_DB_PATH: "data/kintsugi.db",
       N8N_BASE_URL: "https://n8n.example",
       N8N_API_KEY: "n8n-key",
@@ -71,6 +73,7 @@ describe("loadSettings", () => {
       telegramChatId: "42",
       telegramEnabled: true,
       telegramApiBaseUrl: "https://tg.example",
+      mockLlm: true,
       dbPath: "data/kintsugi.db",
       n8nBaseUrl: "https://n8n.example",
       n8nApiKey: "n8n-key",
@@ -100,6 +103,7 @@ describe("loadSettings", () => {
       TINYFISH_API_BASE_URL: " ",
       MOCK_UPSTREAM_URL: "  ",
       KINTSUGI_PUBLIC_URL: "",
+      KINTSUGI_MOCK_LLM: "  ",
     });
     expect(settings.dashboardToken).toBeUndefined();
     expect(settings.llmProvider).toBeUndefined();
@@ -118,6 +122,16 @@ describe("loadSettings", () => {
     expect(settings.tinyfishApiBaseUrl).toBeUndefined();
     expect(settings.mockUpstreamUrl).toBeUndefined();
     expect(settings.publicUrl).toBeUndefined();
+    expect(settings.mockLlm).toBe(false);
+  });
+
+  it("enables mock LLM only on exact trimmed 1; default off", () => {
+    expect(loadSettings({}).mockLlm).toBe(false);
+    expect(loadSettings({ KINTSUGI_MOCK_LLM: "1" }).mockLlm).toBe(true);
+    expect(loadSettings({ KINTSUGI_MOCK_LLM: " 1 " }).mockLlm).toBe(true);
+    for (const off of [undefined, "", "  ", "true", "0", "11", "01", "yes", "on"] as const) {
+      expect(loadSettings({ KINTSUGI_MOCK_LLM: off }).mockLlm).toBe(false);
+    }
   });
 
   it("enables Telegram only on exact case-insensitive true; default off", () => {

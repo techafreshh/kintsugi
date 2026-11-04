@@ -3,12 +3,13 @@
  * sits, selected via `LLM_PROVIDER`. `submit_verdict` is generic over the
  * passed TypeBox schema, so the returned object is already typed as matching
  * that schema. `createLLM` is the orchestrator switch-point: it returns the
- * deterministic mock when `KINTSUGI_MOCK_LLM=1`, the OpenRouter or DeepSeek
+ * deterministic mock when `Settings.mockLlm` is on (`KINTSUGI_MOCK_LLM` exact trimmed `"1"`, parsed via `loadSettings`), the OpenRouter or DeepSeek
  * provider when `LLM_PROVIDER` names one and its key is set, and a
  * zero-network off port otherwise.
  */
 
 import type { Static, TSchema } from "@sinclair/typebox";
+import { loadSettings } from "../config/settings.js";
 import { MockLLM } from "./mock.js";
 import { OpenRouterLLM } from "./openrouter.js";
 import { DeepSeekLLM } from "./deepseek.js";
@@ -67,8 +68,9 @@ function hasKey(env: NodeJS.ProcessEnv, key: string): boolean {
 /**
  * Orchestrator switch-point with an injectable env map (mirroring
  * `loadSettings(env = process.env)` in `src/config/settings.ts`, so tests
- * never touch `process.env` directly). `KINTSUGI_MOCK_LLM=1` (trimmed exact)
- * returns the deterministic mock; otherwise a trimmed, lowercased
+ * never touch `process.env` directly). Mock selection is the unified
+ * `Settings.mockLlm` parse (`KINTSUGI_MOCK_LLM` exact trimmed `"1"` via
+ * `loadSettings`); otherwise a trimmed, lowercased
  * `LLM_PROVIDER` of `openrouter`/`deepseek` returns that provider when its
  * key (`OPENROUTER_API_KEY`/`DEEPSEEK_API_KEY`) is set; every other case
  * returns the zero-network off port. The pi-ai dependency is only loaded
@@ -76,7 +78,7 @@ function hasKey(env: NodeJS.ProcessEnv, key: string): boolean {
  * never touch it.
  */
 export function createLLM(env: NodeJS.ProcessEnv = process.env): LLMPort {
-  if (trimmed(env.KINTSUGI_MOCK_LLM) === "1") {
+  if (loadSettings(env).mockLlm) {
     return new MockLLM(env);
   }
   const provider = trimmed(env.LLM_PROVIDER).toLowerCase();
